@@ -370,6 +370,7 @@ services:
       - '--web.enable-lifecycle'
     volumes:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./config/prometheus/rules:/etc/prometheus/rules
       - ./volume/prometheus:/prometheus
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
@@ -462,6 +463,51 @@ services:
       - bitrix-network
     profiles:
       - backup
+
+  # =====================
+  # БЕЗОПАСНОСТЬ
+  # =====================
+  fail2ban:
+    container_name: ${DOMAIN}_fail2ban
+    build:
+      context: .
+      dockerfile: docker/fail2ban/Dockerfile
+    environment:
+      - TZ=${TZ}
+      - INIT_IPTABLES=true
+    volumes:
+      - ./volume/logs/nginx:/var/log/nginx:ro
+      - ./volume/logs/fail2ban:/var/log/fail2ban
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    privileged: true
+    profiles:
+      - security
+
+  modsecurity:
+    container_name: ${DOMAIN}_modsecurity
+    build:
+      context: .
+      dockerfile: docker/modsecurity/Dockerfile
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ./volume/logs/modsecurity:/var/log/modsecurity
+      - ./volume/logs/nginx:/var/log/nginx
+    ports:
+      - ${MODSEC_HTTP_PORT:-8080}:80
+      - ${MODSEC_HTTPS_PORT:-8443}:443
+    depends_on:
+      - nginx
+    restart: unless-stopped
+    networks:
+      - bitrix-network
+    profiles:
+      - security
 
   # =====================
   # УПРАВЛЕНИЕ

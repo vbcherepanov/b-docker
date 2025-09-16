@@ -516,3 +516,126 @@ help:
 	@echo "  make help-sites     - Команды управления сайтами"
 	@echo "  make help-backup    - Команды управления бэкапами"
 	@echo "  make help-autoconfig - Команды автоконфигурации"
+	@echo "  make help-security  - Команды управления безопасностью"
+
+# === КОМАНДЫ БЕЗОПАСНОСТИ ===
+
+# Управление Fail2ban
+security-up:
+	@echo "🔒 Запуск системы безопасности..."
+	$(DOCKER_COMPOSE) --profile security up -d fail2ban
+
+security-up-full:
+	@echo "🔒 Запуск полной системы безопасности (Fail2ban + ModSecurity)..."
+	$(DOCKER_COMPOSE) --profile security up -d
+
+security-down:
+	@echo "🔒 Остановка системы безопасности..."
+	$(DOCKER_COMPOSE) --profile security down
+
+security-restart:
+	@echo "🔒 Перезапуск системы безопасности..."
+	$(DOCKER_COMPOSE) --profile security restart
+
+security-logs:
+	@echo "🔒 Логи системы безопасности..."
+	$(DOCKER_COMPOSE) --profile security logs -f fail2ban
+
+security-logs-modsec:
+	@echo "🔒 Логи ModSecurity..."
+	$(DOCKER_COMPOSE) --profile security logs -f modsecurity
+
+security-status:
+	@echo "🔒 Статус системы безопасности..."
+	@$(DOCKER_COMPOSE) --profile security ps fail2ban modsecurity || echo "Сервисы безопасности не запущены"
+
+# Управление Fail2ban
+fail2ban-status:
+	@echo "🔒 Статус Fail2ban..."
+	$(DOCKER_COMPOSE) exec fail2ban fail2ban-client status
+
+fail2ban-jails:
+	@echo "🔒 Список jail'ов Fail2ban..."
+	$(DOCKER_COMPOSE) exec fail2ban fail2ban-client status --all
+
+fail2ban-unban:
+	@echo "🔒 Разблокировка IP адреса..."
+	@if [ -z "$(IP)" ]; then \
+		echo "❌ Укажите IP адрес: make fail2ban-unban IP=x.x.x.x"; \
+		exit 1; \
+	fi
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client set nginx-req-limit unbanip $(IP) || true
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client set nginx-403 unbanip $(IP) || true
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client set nginx-404 unbanip $(IP) || true
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client set nginx-botsearch unbanip $(IP) || true
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client set nginx-brute unbanip $(IP) || true
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client set nginx-sqli unbanip $(IP) || true
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client set nginx-xss unbanip $(IP) || true
+	@echo "✅ IP $(IP) разблокирован во всех jail'ах"
+
+fail2ban-ban:
+	@echo "🔒 Блокировка IP адреса..."
+	@if [ -z "$(IP)" ]; then \
+		echo "❌ Укажите IP адрес: make fail2ban-ban IP=x.x.x.x"; \
+		exit 1; \
+	fi
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client set nginx-req-limit banip $(IP)
+	@echo "✅ IP $(IP) заблокирован"
+
+fail2ban-banned:
+	@echo "🔒 Список заблокированных IP..."
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client status nginx-req-limit
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client status nginx-403
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client status nginx-404
+
+# Тестирование безопасности
+security-test:
+	@echo "🔒 Тестирование конфигурации безопасности..."
+	@$(DOCKER_COMPOSE) exec fail2ban fail2ban-client -t
+	@echo "✅ Конфигурация Fail2ban корректна"
+
+# Мониторинг атак
+security-attacks:
+	@echo "🔒 Последние атаки..."
+	@tail -50 ./volume/logs/fail2ban/fail2ban.log | grep Ban || echo "Нет заблокированных IP"
+
+security-stats:
+	@echo "🔒 Статистика безопасности..."
+	@echo "=== Fail2ban статистика ==="
+	@grep "Ban " ./volume/logs/fail2ban/fail2ban.log | wc -l | xargs echo "Всего заблокировано IP:"
+	@echo ""
+	@echo "=== Nginx статистика атак ==="
+	@grep -c " 403 " ./volume/logs/nginx/access.log | xargs echo "403 ошибки:" || echo "403 ошибки: 0"
+	@grep -c " 404 " ./volume/logs/nginx/access.log | xargs echo "404 ошибки:" || echo "404 ошибки: 0"
+	@grep -c " 429 " ./volume/logs/nginx/access.log | xargs echo "Rate limit срабатывания:" || echo "Rate limit срабатывания: 0"
+
+# Справка по безопасности
+help-security:
+	@echo ""
+	@echo "=== КОМАНДЫ БЕЗОПАСНОСТИ ==="
+	@echo ""
+	@echo "Управление системой безопасности:"
+	@echo "  make security-up       - Запуск Fail2ban"
+	@echo "  make security-up-full  - Запуск Fail2ban + ModSecurity"
+	@echo "  make security-down     - Остановка системы безопасности"
+	@echo "  make security-restart  - Перезапуск системы безопасности"
+	@echo "  make security-status   - Статус сервисов безопасности"
+	@echo ""
+	@echo "Управление Fail2ban:"
+	@echo "  make fail2ban-status   - Статус Fail2ban"
+	@echo "  make fail2ban-jails    - Список всех jail'ов"
+	@echo "  make fail2ban-banned   - Список заблокированных IP"
+	@echo "  make fail2ban-unban IP=x.x.x.x  - Разблокировать IP"
+	@echo "  make fail2ban-ban IP=x.x.x.x    - Заблокировать IP"
+	@echo ""
+	@echo "Мониторинг и статистика:"
+	@echo "  make security-logs     - Логи Fail2ban"
+	@echo "  make security-logs-modsec - Логи ModSecurity"
+	@echo "  make security-attacks  - Последние атаки"
+	@echo "  make security-stats    - Статистика безопасности"
+	@echo "  make security-test     - Тестирование конфигурации"
+	@echo ""
+	@echo "Примеры использования:"
+	@echo "  make security-up                    # Запустить защиту"
+	@echo "  make fail2ban-unban IP=192.168.1.1 # Разбанить IP"
+	@echo "  make security-stats                 # Посмотреть статистику"

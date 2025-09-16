@@ -154,3 +154,65 @@ scrape_configs:
           stages:
             - labels:
                 service: memcached
+
+  # Логи Fail2ban
+  - job_name: fail2ban-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: fail2ban
+          service: fail2ban
+          __path__: /var/log/fail2ban/*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+) (?P<level>\w+) +(?P<message>.*)'
+      - labels:
+          level: level
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05,000'
+      # Парсинг jail событий
+      - match:
+          selector: '{job="fail2ban"} |~ ".*\\[\\w+\\].*"'
+          stages:
+            - regex:
+                expression: '\[(?P<jail>[^\]]+)\].*(?P<action>Ban|Unban|Found) (?P<ip>\d+\.\d+\.\d+\.\d+)'
+            - labels:
+                jail: jail
+                action: action
+                ip: ip
+
+  # Логи ModSecurity
+  - job_name: modsecurity-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: modsecurity
+          service: modsecurity
+          __path__: /var/log/modsecurity/*.log
+    pipeline_stages:
+      - multiline:
+          firstline: '^--[0-9a-f]+-A--'
+          max_wait_time: 3s
+      - match:
+          selector: '{job="modsecurity"} |~ ".*ModSecurity.*"'
+          stages:
+            - regex:
+                expression: '\[(?P<timestamp>[^\]]+)\] \[(?P<level>[^\]]+)\] \[client (?P<client_ip>[^\]]+)\] ModSecurity: (?P<message>.*)'
+            - labels:
+                level: level
+                client_ip: client_ip
+            - timestamp:
+                source: timestamp
+                format: '02/Jan/2006:15:04:05 -0700'
+      # Парсинг audit логов
+      - match:
+          selector: '{job="modsecurity"} |~ ".*--[0-9a-f]+-[A-Z]--.*"'
+          stages:
+            - regex:
+                expression: '--(?P<transaction_id>[0-9a-f]+)-(?P<section>[A-Z])--'
+            - labels:
+                transaction_id: transaction_id
+                section: section
