@@ -1,0 +1,78 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus собирает метрики о себе
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter для метрик системы
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 5s
+    metrics_path: /metrics
+
+  # Grafana metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Loki metrics
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Promtail metrics
+  - job_name: 'promtail'
+    static_configs:
+      - targets: ['promtail:9080']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Docker container discovery для автоматического обнаружения
+  - job_name: 'docker-containers'
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Собираем метрики только с контейнеров, у которых есть лейбл prometheus.scrape=true
+      - source_labels: [__meta_docker_container_label_prometheus_scrape]
+        action: keep
+        regex: true
+      # Используем порт из лейбла prometheus.port
+      - source_labels: [__meta_docker_container_label_prometheus_port]
+        action: replace
+        target_label: __address__
+        regex: (.+)
+        replacement: $1
+      # Используем путь из лейбла prometheus.path (по умолчанию /metrics)
+      - source_labels: [__meta_docker_container_label_prometheus_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+        replacement: $1
+      # Добавляем имя контейнера как метку
+      - source_labels: [__meta_docker_container_name]
+        action: replace
+        target_label: container_name
+        regex: /(.+)
+        replacement: $1
+      # Добавляем имя сервиса из docker-compose
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        action: replace
+        target_label: service
+      # Добавляем имя проекта из docker-compose
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        action: replace
+        target_label: project

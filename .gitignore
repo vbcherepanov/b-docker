@@ -1,0 +1,9 @@
+.idea
+.claude
+.env.dev
+.env.local
+.env.prod
+.env
+/www/*
+/ssl/*
+/volume/*

@@ -1,0 +1,67 @@
+; Автоматически сгенерированная конфигурация PHP
+; Системные характеристики: 12 CPU cores, 64GB RAM
+; Окружение: local
+; Дата генерации: Mon Sep 15 22:38:36 MSK 2025
+
+[PHP]
+; Основные настройки
+memory_limit = 512M
+max_execution_time = 300
+max_input_time = 300
+post_max_size = 1024M
+upload_max_filesize = 1024M
+max_file_uploads = 20
+
+; Обработка ошибок
+display_errors = ${DISPLAY_ERRORS}
+log_errors = On
+error_log = /var/log/php/error.log
+
+; Сессии
+session.save_handler = files
+session.save_path = "/var/lib/php/sessions"
+session.gc_maxlifetime = 3600
+session.cookie_lifetime = 0
+
+; OPcache
+opcache.enable = 1
+opcache.memory_consumption = 256
+opcache.interned_strings_buffer = 16
+opcache.max_accelerated_files = 10000
+opcache.validate_timestamps = ${OPCACHE_VALIDATE}
+opcache.revalidate_freq = 2
+opcache.save_comments = 1
+
+; Буферизация
+output_buffering = 4096
+zlib.output_compression = Off
+
+; Безопасность
+expose_php = Off
+allow_url_fopen = On
+allow_url_include = Off
+
+; Временная зона
+date.timezone = ${TZ}
+
+; Bitrix специфичные настройки
+mbstring.func_overload = 0
+mbstring.internal_encoding = UTF-8
+
+[PHP-FPM]
+; FPM настройки процессов
+pm = dynamic
+pm.max_children = 30
+pm.start_servers = 7
+pm.min_spare_servers = 7
+pm.max_spare_servers = 15
+pm.max_requests = 500
+
+; Логирование FPM
+access.log = /var/log/php/fpm-access.log
+slowlog = /var/log/php/fpm-slow.log
+request_slowlog_timeout = 10s
+
+; Мониторинг
+pm.status_path = /status
+ping.path = /ping

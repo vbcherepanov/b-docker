@@ -1,0 +1,25 @@
+upstream rabbitssl {
+    server amqp:15672;
+}
+
+server {
+    index index.php;
+    listen 443 http2 ssl;
+    server_name rabbit.${DOMAIN};
+    server_tokens off;
+
+    ssl_certificate ${CERT_PATH};
+    ssl_certificate_key ${KEY_PATH};
+    include /etc/nginx/snippets/header.conf;
+    include /etc/nginx/snippets/resolver.conf;
+    include /etc/nginx/snippets/ssl.conf;
+    access_log /dev/stdout;
+    error_log  /dev/stderr;
+    location / {
+        proxy_pass http://rabbitssl;
+        proxy_set_header Host ${DOLLAR}host;
+        proxy_set_header X-Real-IP ${DOLLAR}remote_addr;
+        proxy_set_header X-Forwarded-For ${DOLLAR}proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto ${DOLLAR}scheme;
+    }
+}

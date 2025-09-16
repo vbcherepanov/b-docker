@@ -1,0 +1,11 @@
+server {
+    index index.php;
+    server_name ${DOMAIN};
+    listen 80;
+    access_log /dev/stdout;
+    error_log  /dev/stderr;
+    root /home/${UGN}/app/${DOMAIN};
+    include /etc/nginx/snippets/header.conf;
+    include /etc/nginx/snippets/resolver.conf;
+    include /etc/nginx/snippets/bitrix.conf;
+}
