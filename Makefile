@@ -6,11 +6,11 @@ endif
 
 DOCKER_COMPOSE = docker compose
 DOCKER_COMPOSE_LOCAL = docker compose --profile local --profile dev
-DOCKER_COMPOSE_PROD = docker compose --profile monitoring --profile backup
+DOCKER_COMPOSE_PROD = docker compose --profile prod --profile monitoring --profile backup
 UID ?= $(shell id -u)
 GID ?= $(shell id -g)
 UGN ?=bitrix
-NETWORK_NAME ?=nginx_webnet
+NETWORK_NAME ?=${DOMAIN}_network
 
 .PHONY: reload-cron up init down build docker-build docker-up docker-down-clear test init composer-install cli cron-agent tests-run init-system create-unit-test create_dump monitoring-up monitoring-down portainer-up portainer-down backup-db backup-files backup-full set-local set-dev set-prod ssl-generate logs-nginx logs-php status clean-volumes clean-images clean-all disk-usage
 
@@ -21,6 +21,12 @@ up-local: build-base docker-local-build docker-local-up nginx_local_start
 init-local: docker-down-clear-local docker-network-create build-base docker-local-build docker-local-up nginx_local_start
 restart-local: docker-down-local docker-network-create build-base docker-local-build docker-local-up nginx_local_start
 down-local: docker-local-down-clear
+
+# Полный локальный стек с RabbitMQ
+up-local-full: build-base docker-local-full-build docker-local-full-up nginx_local_start
+init-local-full: docker-down-clear-local-full docker-network-create build-base docker-local-full-build docker-local-full-up nginx_local_start
+restart-local-full: docker-down-local-full docker-network-create build-base docker-local-full-build docker-local-full-up nginx_local_start
+down-local-full: docker-local-full-down-clear
 
 # Продакшн (без локальных сервисов)
 up-prod: build-base docker-prod-build docker-prod-up nginx_start
@@ -117,12 +123,30 @@ docker-local-monitoring-down:
 docker-local-monitoring-down-clear:
 	$(DOCKER_COMPOSE) --profile local --profile dev --profile monitoring down -v --remove-orphans
 
+# Локальная разработка с RabbitMQ
+docker-local-full-build:
+	$(DOCKER_COMPOSE) --profile local --profile dev --profile rabbitmq build --build-arg PHP_VERSION=${PHP_VERSION}
+
+docker-local-full-up:
+	$(DOCKER_COMPOSE) --profile local --profile dev --profile rabbitmq up -d
+
+docker-local-full-down:
+	$(DOCKER_COMPOSE) --profile local --profile dev --profile rabbitmq down
+
+docker-local-full-down-clear:
+	$(DOCKER_COMPOSE) --profile local --profile dev --profile rabbitmq down -v --remove-orphans
+
 # Совместимость со старыми командами
 docker-build: docker-local-build
 docker-up: docker-local-up
 docker-down: docker-local-down
 docker-down-clear: docker-local-down-clear
 docker-down-clear-local: docker-local-down-clear
+docker-down-clear-local-full: docker-local-full-down-clear
+docker-down-clear-prod: docker-prod-down-clear
+docker-down-monitoring: docker-monitoring-down
+docker-down-local-monitoring: docker-local-monitoring-down
+docker-down-local-full: docker-local-full-down
 docker-local-pull:
 	$(DOCKER_COMPOSE_LOCAL) pull
 docker-pull:
@@ -196,13 +220,13 @@ bash_cli_local:
 
 # Команды для мониторинга
 monitoring-up:
-	$(DOCKER_COMPOSE_LOCAL) --profile monitoring up -d
+	$(DOCKER_COMPOSE) --profile local --profile dev --profile monitoring up -d
 monitoring-up-prod:
-	$(DOCKER_COMPOSE) --profile monitoring up -d
+	$(DOCKER_COMPOSE) --profile prod --profile monitoring up -d
 monitoring-down:
-	$(DOCKER_COMPOSE_LOCAL) --profile monitoring down
+	$(DOCKER_COMPOSE) --profile local --profile dev --profile monitoring down
 monitoring-down-prod:
-	$(DOCKER_COMPOSE) --profile monitoring down
+	$(DOCKER_COMPOSE) --profile prod --profile monitoring down
 
 # Команды для Portainer Agent
 portainer-up:
@@ -254,15 +278,17 @@ logs-php-local:
 logs-php:
 	$(DOCKER_COMPOSE) logs -f php-fpm
 logs-mysql-local:
-	$(DOCKER_COMPOSE_LOCAL) logs -f mysql
+	$(DOCKER_COMPOSE) --profile local --profile dev logs -f mysql
+logs-mysql:
+	$(DOCKER_COMPOSE) logs -f mysql
 logs-grafana-local:
-	$(DOCKER_COMPOSE_LOCAL) logs -f grafana
+	$(DOCKER_COMPOSE) --profile local --profile dev --profile monitoring logs -f grafana
 logs-grafana:
-	$(DOCKER_COMPOSE) logs -f grafana
+	$(DOCKER_COMPOSE) --profile monitoring logs -f grafana
 logs-backup-local:
-	$(DOCKER_COMPOSE_LOCAL) logs -f backup
+	$(DOCKER_COMPOSE) --profile local --profile dev --profile backup logs -f backup
 logs-backup:
-	$(DOCKER_COMPOSE) logs -f backup
+	$(DOCKER_COMPOSE) --profile backup logs -f backup
 
 # Команды для проверки статуса
 status-local:
@@ -494,12 +520,16 @@ help:
 	@echo ""
 	@echo "Основные команды:"
 	@echo "  make init-local     - Полная инициализация (локально)"
+	@echo "  make init-local-full - Полная инициализация с RabbitMQ (локально)"
 	@echo "  make init           - Полная инициализация (продакшн)"
 	@echo "  make up-local       - Запуск (локально)"
+	@echo "  make up-local-full  - Запуск с RabbitMQ (локально)"
 	@echo "  make up             - Запуск (продакшн)"
 	@echo "  make restart-local  - Перезапуск (локально)"
+	@echo "  make restart-local-full - Перезапуск с RabbitMQ (локально)"
 	@echo "  make restart        - Перезапуск (продакшн)"
 	@echo "  make down-local     - Остановка (локально)"
+	@echo "  make down-local-full - Остановка с RabbitMQ (локально)"
 	@echo "  make down           - Остановка (продакшн)"
 	@echo ""
 	@echo "Переключение окружений:"

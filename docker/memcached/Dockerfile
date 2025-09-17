@@ -13,13 +13,13 @@ ENV MEMCACHED_THREADS=${MEMCACHED_THREADS}
 # Переключаемся на root для установки пакетов
 USER root
 
-# Настройка таймзоны
-RUN apk add --no-cache tzdata && \
+# Настройка таймзоны и установка утилит для healthcheck
+RUN apk add --no-cache tzdata netcat-openbsd && \
     ln -snf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime && \
     echo ${TZ:-UTC} > /etc/timezone
 
-# Возвращаемся к пользователю memcached
-USER memcached
+# Запускаем от root пользователя (временное решение)
+# USER memcached - отключено, так как пользователь не существует в базовом образе
 
 COPY /config/memcached/memcached.conf /etc/memcached.conf
 EXPOSE 11211
@@ -27,7 +27,8 @@ EXPOSE 11211
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD echo stats | nc -w 2 127.0.0.1 11211 | grep -q "STAT pid"
 
-CMD memcached -m ${MEMCACHED_MEMORY_LIMIT} \
+CMD memcached -u root \
+              -m ${MEMCACHED_MEMORY_LIMIT} \
               -c ${MEMCACHED_CONN_LIMIT} \
               -p 11211 \
               -l 0.0.0.0 \

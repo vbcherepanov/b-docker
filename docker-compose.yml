@@ -204,15 +204,17 @@ services:
   # =====================
   mysql:
     container_name: ${DOMAIN}_mysql
-    build:
-      context: .
-      dockerfile: docker/mysql/Dockerfile
-      args:
-        TZ: ${TZ}
-        DB_USERNAME: ${DB_USERNAME}
-        DB_NAME: ${DB_NAME}
-        DB_PASSWORD: ${DB_PASSWORD}
-        DOMAIN: ${DOMAIN}
+    image: mysql:8.4.2
+    # Временно используем стандартный образ
+    # build:
+    #   context: .
+    #   dockerfile: docker/mysql/Dockerfile
+    #   args:
+    #     TZ: ${TZ}
+    #     DB_USERNAME: ${DB_USERNAME}
+    #     DB_NAME: ${DB_NAME}
+    #     DB_PASSWORD: ${DB_PASSWORD}
+    #     DOMAIN: ${DOMAIN}
     environment:
       TZ: ${TZ}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
@@ -223,7 +225,8 @@ services:
     volumes:
       - ./volume/mysql/base:/var/lib/mysql
       - ./volume/logs/mysql:/var/log/mysql
-      - ./config/mysql/my.conf:/etc/mysql/conf.d/bitrix.cnf
+      # Временно отключена кастомная конфигурация
+      # - ./config/mysql/my.conf:/etc/mysql/conf.d/bitrix.cnf
       - ./volume/mysql/dump:/dump
     ports:
       - ${DB_PORT:-3306}:3306
