@@ -37,11 +37,10 @@ ENV DOMAIN=${DOMAIN}
 USER root
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-# Установка утилит с apt-get
-RUN apt-get update && \
-    apt-get install -y expect && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Установка утилит для Oracle Linux
+RUN microdnf update -y && \
+    microdnf install -y expect && \
+    microdnf clean all
 
 COPY --from=builder /usr/bin/pv /usr/local/bin/pv
 COPY --from=builder /lib/ld-musl-*.so* /lib/

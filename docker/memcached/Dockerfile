@@ -10,10 +10,16 @@ ENV MEMCACHED_CONN_LIMIT=${MEMCACHED_CONN_LIMIT}
 ENV MEMCACHED_MEMORY_LIMIT=${MEMCACHED_MEMORY_LIMIT}
 ENV MEMCACHED_THREADS=${MEMCACHED_THREADS}
 
+# Переключаемся на root для установки пакетов
+USER root
+
 # Настройка таймзоны
 RUN apk add --no-cache tzdata && \
     ln -snf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime && \
     echo ${TZ:-UTC} > /etc/timezone
+
+# Возвращаемся к пользователю memcached
+USER memcached
 
 COPY /config/memcached/memcached.conf /etc/memcached.conf
 EXPOSE 11211
