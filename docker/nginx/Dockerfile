@@ -94,7 +94,8 @@ EXPOSE 8080 8443
 # --- Рабочая директория и пользователь ---
 RUN chown -R $UID:$GID /home/$UGN
 WORKDIR /home/$UGN/app
-USER $UGN
+# FIXME: Running as root for now - nginx master needs root to bind to ports and write PID
+# USER $UGN
 
 # --- Healthcheck ---
 HEALTHCHECK --interval=300s --timeout=5s --retries=3 \

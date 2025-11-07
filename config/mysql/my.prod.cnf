@@ -1,0 +1,216 @@
+# ============================================================================
+# MYSQL CONFIGURATION FOR BITRIX - PRODUCTION
+# Конфигурация MySQL для продакшн окружения
+# Оптимизировано под: 1С-Битрикс, высокая нагрузка, максимальная производительность
+# Рекомендуемое железо: 16GB+ RAM, 4+ CPU cores, SSD
+# ============================================================================
+
+[mysqld]
+# ============================================================================
+# ОСНОВНЫЕ НАСТРОЙКИ
+# ============================================================================
+bind-address = 0.0.0.0
+port = 3306
+datadir = /var/lib/mysql
+socket = /var/run/mysqld/mysqld.sock
+pid-file = /var/run/mysqld/mysqld.pid
+
+# Timezone
+default-time-zone = "+03:00"
+
+# Пропускаем разрешение имен хостов (ускорение)
+skip-name-resolve = 1
+
+# Server ID (для репликации, если потребуется)
+server-id = 1
+
+# ============================================================================
+# КОДИРОВКА
+# ============================================================================
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+init-connect = "SET NAMES utf8mb4"
+
+# ============================================================================
+# INNODB НАСТРОЙКИ (КРИТИЧНО ДЛЯ ПРОИЗВОДИТЕЛЬНОСТИ)
+# ============================================================================
+# Режим строгости
+innodb_strict_mode = OFF
+
+# Один файл на таблицу
+innodb_file_per_table = 1
+
+# Буфер пул (60-70% от RAM сервера)
+# Для сервера с 16GB RAM = 9600MB
+innodb_buffer_pool_size = 9600M
+
+# Количество инстансов (рекомендуется 1 инстанс на 1GB буфера)
+innodb_buffer_pool_instances = 8
+
+# Прогрев буфер пула при старте
+innodb_buffer_pool_dump_at_shutdown = 1
+innodb_buffer_pool_load_at_startup = 1
+
+# Метод flush
+innodb_flush_method = O_DIRECT
+
+# Flush лога (1 = максимальная надежность, но медленнее)
+# Для PROD рекомендуется 1, для высокой нагрузки можно 2
+innodb_flush_log_at_trx_commit = 1
+
+# Redo log capacity (2GB для prod)
+innodb_redo_log_capacity = 2147483648
+
+# Буфер для лога
+innodb_log_buffer_size = 64M
+
+# Timeout для блокировок
+innodb_lock_wait_timeout = 50
+
+# IO настройки
+innodb_io_capacity = 2000
+innodb_io_capacity_max = 4000
+innodb_read_io_threads = 8
+innodb_write_io_threads = 8
+
+# Flush neighbors (0 для SSD, 1 для HDD)
+innodb_flush_neighbors = 0
+
+# File format
+innodb_file_format = Barracuda
+
+# Temporary tablespace
+innodb_temp_data_file_path = ibtmp1:12M:autoextend:max:10G
+
+# ============================================================================
+# ПРОИЗВОДИТЕЛЬНОСТЬ И КЭШИРОВАНИЕ
+# ============================================================================
+# Максимум подключений (для prod - больше)
+max_connections = 300
+
+# Кэш потоков (максимум одновременных подключений)
+thread_cache_size = 100
+
+# Размер стека потока
+thread_stack = 512K
+
+# Кэш открытых таблиц
+table_open_cache = 4000
+table_definition_cache = 2000
+table_open_cache_instances = 16
+
+# Буферы
+sort_buffer_size = 4M
+join_buffer_size = 4M
+read_buffer_size = 2M
+read_rnd_buffer_size = 8M
+
+# Временные таблицы
+tmp_table_size = 128M
+max_heap_table_size = 128M
+
+# Максимальный размер пакета
+max_allowed_packet = 256M
+
+# Буфер для MyISAM
+key_buffer_size = 256M
+
+# ============================================================================
+# BITRIX СПЕЦИФИЧНЫЕ НАСТРОЙКИ
+# ============================================================================
+# Уровень изоляции транзакций
+transaction-isolation = READ-COMMITTED
+
+# SQL mode (пустой для Битрикс)
+sql_mode = ""
+
+# Binary logging (для репликации и восстановления)
+# Для PROD рекомендуется включить
+log_bin = /var/log/mysql/mysql-bin.log
+binlog_format = ROW
+binlog_expire_logs_seconds = 604800
+max_binlog_size = 512M
+sync_binlog = 1
+
+# ============================================================================
+# ЛОГИРОВАНИЕ (ДЛЯ PROD - МИНИМАЛЬНОЕ)
+# ============================================================================
+# General log (ВЫКЛЮЧЕН в prod)
+general_log = 0
+
+# Error log
+log_error = /var/log/mysql/error.log
+log_error_verbosity = 2
+
+# Slow query log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 3
+log_queries_not_using_indexes = 0
+min_examined_row_limit = 1000
+
+# ============================================================================
+# БЕЗОПАСНОСТЬ
+# ============================================================================
+# Отключаем local_infile для безопасности
+local_infile = 0
+
+# Максимум ошибок подключения
+max_connect_errors = 10000
+
+# ============================================================================
+# РЕПЛИКАЦИЯ (если используется)
+# ============================================================================
+# relay_log = /var/log/mysql/mysql-relay-bin
+# log_slave_updates = 1
+# read_only = 0
+
+# ============================================================================
+# TIMEOUTS
+# ============================================================================
+interactive_timeout = 7200
+wait_timeout = 7200
+connect_timeout = 10
+
+# ============================================================================
+# ПРОЧИЕ НАСТРОЙКИ
+# ============================================================================
+# Case sensitivity для таблиц
+lower_case_table_names = 0
+
+# Performance Schema (включаем для мониторинга)
+performance_schema = ON
+performance-schema-instrument = 'stage/%=ON'
+performance-schema-consumer-events-stages-current = ON
+performance-schema-consumer-events-stages-history = ON
+performance-schema-consumer-events-stages-history-long = ON
+
+[mysql]
+default-character-set = utf8mb4
+
+[mysqldump]
+quick
+quote-names
+max_allowed_packet = 256M
+single-transaction
+
+[client]
+port = 3306
+socket = /var/run/mysqld/mysqld.sock
+default-character-set = utf8mb4
+
+# ============================================================================
+# РЕКОМЕНДАЦИИ ПО МОНИТОРИНГУ
+# ============================================================================
+# Следите за следующими метриками:
+# - InnoDB Buffer Pool hit rate (должен быть > 99%)
+# - Slow queries (должно быть минимум)
+# - Table locks (должно быть минимум)
+# - Connections (не должно приближаться к max_connections)
+# - Disk I/O wait (должно быть < 10%)
+#
+# Полезные команды для мониторинга:
+# SHOW ENGINE INNODB STATUS;
+# SHOW PROCESSLIST;
+# SHOW GLOBAL STATUS LIKE '%buffer_pool%';
+# SHOW GLOBAL STATUS LIKE '%slow%';

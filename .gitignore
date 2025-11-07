@@ -7,3 +7,4 @@
 /www/*
 /ssl/*
 /volume/*
+.DS_Store

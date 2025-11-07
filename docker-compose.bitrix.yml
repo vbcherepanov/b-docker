@@ -1,0 +1,755 @@
+# ============================================================================
+# DOCKER COMPOSE ДЛЯ 1С-БИТРИКС
+# Единый Bitrix контейнер + оптимизированная структура
+# Поддержка окружений: local, dev, test, prod
+# Кросс-платформенность: Linux, macOS, Windows
+# ============================================================================
+
+version: '3.9'
+
+# ============================================================================
+# X-TEMPLATES: ПЕРЕИСПОЛЬЗУЕМЫЕ КОНФИГУРАЦИИ
+# ============================================================================
+
+# Volumes шаблоны
+x-volumes:
+  # Основной код приложения
+  app-code: &app-code
+    type: bind
+    source: ./www
+    target: /home/${UGN}/app
+
+  # Битрикс специфичные папки (монтируются отдельно для гибкости)
+  app-upload: &app-upload
+    type: bind
+    source: ./www/upload
+    target: /home/${UGN}/app/upload
+
+  app-local: &app-local
+    type: bind
+    source: ./www/local
+    target: /home/${UGN}/app/local
+
+  app-bitrix-cache: &app-bitrix-cache
+    type: bind
+    source: ./www/bitrix/cache
+    target: /home/${UGN}/app/bitrix/cache
+
+  # Конфигурационные файлы
+  msmtp: &msmtp ./config/msmtp/msmtprc:/etc/msmtprc:ro
+  crontab: &crontab ./config/cron/crontab:/etc/crontabs/${UGN}
+
+  # Логи (доступны и для хоста и для Promtail)
+  logs-nginx: &logs-nginx ./volume/logs/nginx:/var/log/nginx
+  logs-letsencrypt: &logs-letsencrypt ./volume/logs/letsencrypt:/var/log/letsencrypt
+  logs-php: &logs-php ./volume/logs/php:/var/log/php
+  logs-php-fpm: &logs-php-fpm ./volume/logs/php-fpm:/var/log/php-fpm
+  logs-cron: &logs-cron ./volume/logs/cron:/var/log/cron
+  logs-supervisor: &logs-supervisor ./volume/logs/supervisor:/var/log/supervisor
+  logs-bitrix: &logs-bitrix ./volume/logs/bitrix:/var/log/bitrix
+
+  # Бэкапы и SSL
+  backup-data: &backup-data ./backups:/backups
+  ssl-certs: &ssl-certs ./ssl:/etc/ssl/certs
+
+  # Docker логи для Promtail
+  docker-logs: &docker-logs /var/lib/docker/containers:/var/lib/docker/containers:ro
+
+# Зависимости для PHP контейнеров
+x-depends-on-all: &depends-on-all
+  mysql:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  memcached:
+    condition: service_healthy
+
+# Общие переменные окружения для Bitrix
+x-bitrix-env: &bitrix-env
+  TZ: ${TZ}
+  BITRIX_VA_VER: ${BITRIX_VM_VER}
+  APP_ENV: ${ENVIRONMENT}
+  APP_DEBUG: ${DEBUG}
+  PHP_IDE_CONFIG: serverName=${DOMAIN}
+  XDEBUG_SESSION: docker-server
+  # Database
+  DB_HOST: ${DB_HOST:-mysql}
+  DB_PORT: ${DB_PORT:-3306}
+  DB_NAME: ${DB_NAME}
+  DB_USERNAME: ${DB_USERNAME}
+  DB_PASSWORD: ${DB_PASSWORD}
+  # Cache
+  REDIS_HOST: ${REDIS_HOST:-redis}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+  MEMCACHED_HOST: ${MEMCACHED_HOST:-memcached}
+  MEMCACHED_PORT: 11211
+  # Queue (if RabbitMQ enabled)
+  RABBITMQ_HOST: ${RABBITMQ_HOST:-amqp}
+  RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+  RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER}
+  RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
+
+# Logging configuration
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# ============================================================================
+# SERVICES
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # BITRIX - ЕДИНЫЙ КОНТЕЙНЕР С PHP-FPM + CLI + CRON + SUPERVISOR
+  # ==========================================================================
+  bitrix:
+    container_name: ${DOMAIN}_bitrix
+    hostname: ${DOMAIN}
+    build:
+      context: .
+      dockerfile: docker/php/bitrix/Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+        TZ: ${TZ}
+        ENVIRONMENT: ${ENVIRONMENT}
+        DOMAIN: ${DOMAIN}
+        EMAIL: ${EMAIL}
+        SSL: ${SSL:-0}
+        UID: ${UID}
+        GID: ${GID}
+        UGN: ${UGN}
+        DEBUG: ${DEBUG:-0}
+      # Используем buildkit для ускорения сборки
+      cache_from:
+        - ${DOMAIN}_bitrix:latest
+
+    environment:
+      <<: *bitrix-env
+      # PHP-FPM настройки
+      PHP_FPM_PM: ${PHP_FPM_PM:-dynamic}
+      PHP_FPM_MAX_CHILDREN: ${PHP_FPM_MAX_CHILDREN:-50}
+      PHP_FPM_START_SERVERS: ${PHP_FPM_START_SERVERS:-5}
+      PHP_FPM_MIN_SPARE_SERVERS: ${PHP_FPM_MIN_SPARE_SERVERS:-5}
+      PHP_FPM_MAX_SPARE_SERVERS: ${PHP_FPM_MAX_SPARE_SERVERS:-35}
+      # PHP настройки
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-256M}
+      PHP_UPLOAD_MAX_FILESIZE: ${PHP_UPLOAD_MAX_FILESIZE:-64M}
+      PHP_POST_MAX_SIZE: ${PHP_POST_MAX_SIZE:-64M}
+      PHP_MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-300}
+      PHP_MAX_INPUT_TIME: ${PHP_MAX_INPUT_TIME:-300}
+      # OPcache
+      PHP_OPCACHE_ENABLE: ${PHP_OPCACHE_ENABLE:-1}
+      PHP_OPCACHE_MEMORY: ${PHP_OPCACHE_MEMORY:-128}
+      PHP_OPCACHE_MAX_FILES: ${PHP_OPCACHE_MAX_FILES:-10000}
+
+    volumes:
+      # Основной код приложения
+      - *app-code
+      # Битрикс специфичные папки (отдельное монтирование для контроля прав)
+      - *app-upload
+      - *app-local
+      - *app-bitrix-cache
+      # Конфигурации
+      - *msmtp
+      - *crontab
+      # Логи
+      - *logs-php
+      - *logs-php-fpm
+      - *logs-cron
+      - *logs-supervisor
+      - *logs-bitrix
+      # Composer cache (для ускорения установки зависимостей)
+      - composer-cache:/home/${UGN}/.composer
+
+    depends_on:
+      <<: *depends-on-all
+
+    # Expose порт PHP-FPM для nginx
+    expose:
+      - "9000"
+
+    # Для dev окружения можно открыть порт для прямого доступа
+    # ports:
+    #   - "9000:9000"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+    # Labels для Prometheus и мониторинга
+    labels:
+      - "com.docker.compose.project=${COMPOSE_PROJECT_NAME:-bitrix}"
+      - "com.docker.compose.service=bitrix"
+      - "monitoring=true"
+      - "prometheus.scrape=true"
+      - "prometheus.port=9000"
+
+  # ==========================================================================
+  # NGINX - ВЕБ-СЕРВЕР
+  # ==========================================================================
+  nginx:
+    container_name: ${DOMAIN}_nginx
+    hostname: nginx
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+      args:
+        TZ: ${TZ}
+        ENVIRONMENT: ${ENVIRONMENT}
+        SSL: ${SSL:-0}
+        DOMAIN: ${DOMAIN}
+        EMAIL: ${EMAIL}
+        MAIL_CONFIG: ${MAIL_CONFIG:-0}
+        RABBIT_CONFIG: ${RABBIT_CONFIG:-0}
+        DOLLAR: $$
+        UID: ${UID}
+        GID: ${GID}
+        UGN: ${UGN}
+
+    # FIXME: Nginx master process needs to run as root to bind ports and write PID file
+    # user: "${UID}:${GID}"
+
+    environment:
+      TZ: ${TZ}
+      # FastCGI backend
+      PHP_FPM_HOST: bitrix
+      PHP_FPM_PORT: 9000
+
+    volumes:
+      - *app-code
+      - *logs-nginx
+      - *logs-letsencrypt
+      - *ssl-certs
+      - ./config/nginx/conf:/etc/nginx/conf.d
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+    depends_on:
+      bitrix:
+        condition: service_healthy
+
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+      - "${HTTPS_PORT:-443}:8443"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+    labels:
+      - "com.docker.compose.service=nginx"
+      - "monitoring=true"
+
+  # ==========================================================================
+  # MYSQL - БАЗА ДАННЫХ
+  # ==========================================================================
+  mysql:
+    container_name: ${DOMAIN}_mysql
+    image: mysql:8.0
+    # platform: linux/amd64 # Removed - causes issues on ARM Macs
+
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --sql-mode=NO_ENGINE_SUBSTITUTION
+      # FIXME: O_DIRECT causes issues on macOS/ARM
+      # - --innodb-flush-method=O_DIRECT
+      - --innodb-buffer-pool-size=512M
+      - --max-connections=${MYSQL_MAX_CONNECTIONS:-200}
+
+    environment:
+      TZ: ${TZ}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # FIXME: Temporarily disabled to troubleshoot
+      # - ./volume/logs/mysql:/var/log/mysql
+      # - ./volume/mysql/dump:/dump
+      # - ./config/mysql/my.local.optimized.cnf:/etc/mysql/conf.d/bitrix.cnf:ro
+
+    ports:
+      - "${DB_PORT:-3306}:3306"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Resource limits для продакшн
+    deploy:
+      resources:
+        limits:
+          memory: ${MYSQL_MEMORY_LIMIT:-2G}
+        reservations:
+          memory: ${MYSQL_MEMORY_RESERVATION:-1G}
+
+    labels:
+      - "com.docker.compose.service=mysql"
+      - "monitoring=true"
+
+  # ==========================================================================
+  # REDIS - КЭШИРОВАНИЕ
+  # ==========================================================================
+  redis:
+    container_name: ${DOMAIN}_redis
+    build:
+      context: .
+      dockerfile: docker/redis/Dockerfile
+      args:
+        TZ: ${TZ}
+
+    command: >
+      redis-server
+      /usr/local/etc/redis/redis.conf
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory ${REDIS_MAX_MEMORY:-512mb}
+      --maxmemory-policy allkeys-lru
+
+    environment:
+      TZ: ${TZ}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+    volumes:
+      - redis-data:/data
+      - ./volume/logs/redis:/var/log/redis
+      - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    labels:
+      - "com.docker.compose.service=redis"
+      - "monitoring=true"
+
+  # ==========================================================================
+  # MEMCACHED - ДОПОЛНИТЕЛЬНОЕ КЭШИРОВАНИЕ
+  # ==========================================================================
+  memcached:
+    container_name: ${DOMAIN}_memcached
+    build:
+      context: .
+      dockerfile: docker/memcached/Dockerfile
+      args:
+        TZ: ${TZ}
+        MEMCACHED_MEMORY_LIMIT: ${MEMCACHED_MEMORY_LIMIT:-256}
+        MEMCACHED_THREADS: ${MEMCACHED_THREADS:-4}
+        MEMCACHED_CONN_LIMIT: ${MEMCACHED_CONN_LIMIT:-1024}
+
+    environment:
+      TZ: ${TZ}
+
+    command: memcached -u root -m ${MEMCACHED_MEMORY_LIMIT:-256} -c ${MEMCACHED_CONN_LIMIT:-1024} -t ${MEMCACHED_THREADS:-4} -v
+
+    volumes:
+      - ./volume/logs/memcached:/var/log/memcached
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "11211"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    labels:
+      - "com.docker.compose.service=memcached"
+
+  # ==========================================================================
+  # RABBITMQ - ОЧЕРЕДИ (ОПЦИОНАЛЬНО)
+  # ==========================================================================
+  amqp:
+    container_name: ${DOMAIN}_rabbitmq
+    hostname: rabbitmq
+    build:
+      context: .
+      dockerfile: docker/rabbitmq/Dockerfile
+      args:
+        TZ: ${TZ}
+        UID: ${UID}
+        GID: ${GID}
+
+    environment:
+      TZ: ${TZ}
+      RABBITMQ_ERLANG_COOKIE: ${RABBIT_COOKIE}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST}
+
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./volume/logs/rabbitmq:/var/log/rabbitmq
+
+    ports:
+      - "${RABBIT_PORT:-5672}:5672"
+      - "${RABBIT_UI_PORT:-15672}:15672"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - rabbitmq
+      - full
+
+    labels:
+      - "com.docker.compose.service=rabbitmq"
+
+  # ==========================================================================
+  # MAILHOG - ПЕРЕХВАТ ПОЧТЫ ДЛЯ РАЗРАБОТКИ
+  # ==========================================================================
+  mailhog:
+    container_name: ${DOMAIN}_mailhog
+    image: mailhog/mailhog:latest
+
+    environment:
+      TZ: ${TZ}
+
+    ports:
+      - "${MAILHOG_PORT:-1025}:1025"
+      - "${MAILHOG_WEB_PORT:-8025}:8025"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - local
+      - dev
+
+    labels:
+      - "com.docker.compose.service=mailhog"
+
+  # ==========================================================================
+  # МОНИТОРИНГ И ЛОГИРОВАНИЕ
+  # ==========================================================================
+
+  grafana:
+    container_name: ${DOMAIN}_grafana
+    image: grafana/grafana:latest
+
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel
+      - GF_SERVER_ROOT_URL=http://${DOMAIN}:${GRAFANA_PORT:-3000}
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=grafana"
+
+  prometheus:
+    container_name: ${DOMAIN}_prometheus
+    image: prom/prometheus:latest
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=prometheus"
+
+  loki:
+    container_name: ${DOMAIN}_loki
+    image: grafana/loki:latest
+
+    command: -config.file=/etc/loki/local-config.yaml
+
+    volumes:
+      - ./config/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+
+    ports:
+      - "3100:3100"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=loki"
+
+  promtail:
+    container_name: ${DOMAIN}_promtail
+    image: grafana/promtail:latest
+
+    command: -config.file=/etc/promtail/config.yml
+
+    volumes:
+      - *docker-logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/promtail/config.yml:/etc/promtail/config.yml:ro
+      - promtail-positions:/run/promtail
+      - ./volume/logs:/var/log:ro
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=promtail"
+
+  node-exporter:
+    container_name: ${DOMAIN}_node_exporter
+    image: prom/node-exporter:latest
+
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+    ports:
+      - "9100:9100"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=node-exporter"
+
+  # ==========================================================================
+  # БЭКАПЫ
+  # ==========================================================================
+
+  backup:
+    container_name: ${DOMAIN}_backup
+    build:
+      context: .
+      dockerfile: docker/backup/Dockerfile
+      args:
+        TZ: ${TZ}
+
+    environment:
+      - DB_HOST=${DB_HOST:-mysql}
+      - DB_NAME=${DB_NAME}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - BACKUP_SCHEDULE_DB=${BACKUP_SCHEDULE_DB:-0 3 * * *}
+      - BACKUP_SCHEDULE_FILES=${BACKUP_SCHEDULE_FILES:-0 4 * * *}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      - TZ=${TZ}
+
+    volumes:
+      - *app-code
+      - *backup-data
+      - ./config/backup:/etc/backup:ro
+      - ./volume/mysql/dump:/mysql-dump
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - backup
+      - full
+
+    labels:
+      - "com.docker.compose.service=backup"
+
+  # ==========================================================================
+  # БЕЗОПАСНОСТЬ
+  # ==========================================================================
+
+  fail2ban:
+    container_name: ${DOMAIN}_fail2ban
+    build:
+      context: .
+      dockerfile: docker/fail2ban/Dockerfile
+
+    environment:
+      - TZ=${TZ}
+      - INIT_IPTABLES=true
+
+    volumes:
+      - ./volume/logs/nginx:/var/log/nginx:ro
+      - ./volume/logs/fail2ban:/var/log/fail2ban
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    network_mode: host
+
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+
+    privileged: true
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - security
+      - full
+
+    labels:
+      - "com.docker.compose.service=fail2ban"
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+
+networks:
+  bitrix-network:
+    name: ${DOMAIN}_network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET:-172.20.0.0/16}
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+
+volumes:
+  # Persistent data
+  mysql-data:
+    name: ${DOMAIN}_mysql_data
+  redis-data:
+    name: ${DOMAIN}_redis_data
+  rabbitmq-data:
+    name: ${DOMAIN}_rabbitmq_data
+
+  # Monitoring
+  grafana-data:
+    name: ${DOMAIN}_grafana_data
+  prometheus-data:
+    name: ${DOMAIN}_prometheus_data
+  loki-data:
+    name: ${DOMAIN}_loki_data
+  promtail-positions:
+    name: ${DOMAIN}_promtail_positions
+
+  # Composer cache
+  composer-cache:
+    name: ${DOMAIN}_composer_cache

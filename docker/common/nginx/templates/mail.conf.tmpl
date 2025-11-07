@@ -1,6 +1,3 @@
-upstream mailhog {
-    server mailhog:8025;
-}
 server {
     server_name mail.${DOMAIN};
     listen 80;
@@ -8,8 +5,10 @@ server {
     error_log  /dev/stderr;
     include /etc/nginx/snippets/header.conf;
     include /etc/nginx/snippets/resolver.conf;
+
     location / {
-        proxy_pass http://mailhog;
+        set ${DOLLAR}mailhog_upstream mailhog:8025;
+        proxy_pass http://${DOLLAR}mailhog_upstream;
         proxy_set_header Host ${DOLLAR}host;
         proxy_set_header X-Real-IP ${DOLLAR}remote_addr;
         proxy_set_header X-Forwarded-For ${DOLLAR}proxy_add_x_forwarded_for;

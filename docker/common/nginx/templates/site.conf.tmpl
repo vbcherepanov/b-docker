@@ -5,6 +5,27 @@ server {
     access_log /dev/stdout;
     error_log  /dev/stderr;
     root /home/${UGN}/app/${DOMAIN};
+
+    # Заголовки безопасности
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+
+    # Блокировка доступа к скрытым файлам
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Блокировка бэкапов и конфигов
+    location ~* \.(bak|backup|old|orig|tmp|temp|sql|log|conf|ini|swp|~|env|git|svn|htaccess|htpasswd)$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
     include /etc/nginx/snippets/header.conf;
     include /etc/nginx/snippets/resolver.conf;
     include /etc/nginx/snippets/bitrix.conf;

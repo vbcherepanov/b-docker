@@ -1,0 +1,93 @@
+[DEFAULT]
+# Основные настройки fail2ban
+ignoreip = 127.0.0.1/8 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+bantime = 3600
+findtime = 600
+maxretry = 5
+backend = auto
+usedns = warn
+logencoding = auto
+enabled = false
+filter = %(__name__)s
+destemail = root@localhost
+sender = root@localhost
+mta = sendmail
+protocol = tcp
+chain = INPUT
+port = 0:65535
+fail2ban_agent = Fail2Ban/%(fail2ban_version)s
+
+# Действие по умолчанию - iptables
+action_mw = %(banaction)s[name=%(__name__)s, bantime="%(bantime)s", port="%(port)s", protocol="%(protocol)s"]
+action_mwl = %(banaction)s[name=%(__name__)s, bantime="%(bantime)s", port="%(port)s", protocol="%(protocol)s"]
+action = %(action_mw)s
+
+# Nginx общие атаки
+[nginx-req-limit]
+enabled = true
+port = http,https
+filter = nginx-req-limit
+logpath = /var/log/nginx/access.log
+maxretry = 10
+findtime = 600
+bantime = 3600
+
+# Nginx 403 ошибки
+[nginx-403]
+enabled = true
+port = http,https
+filter = nginx-403
+logpath = /var/log/nginx/access.log
+maxretry = 5
+findtime = 600
+bantime = 3600
+
+# Nginx 404 ошибки
+[nginx-404]
+enabled = true
+port = http,https
+filter = nginx-404
+logpath = /var/log/nginx/access.log
+maxretry = 20
+findtime = 600
+bantime = 1800
+
+# Nginx bot protection
+[nginx-botsearch]
+enabled = true
+port = http,https
+filter = nginx-botsearch
+logpath = /var/log/nginx/access.log
+maxretry = 3
+findtime = 600
+bantime = 7200
+
+# Nginx brute force
+[nginx-brute]
+enabled = true
+port = http,https
+filter = nginx-brute
+logpath = /var/log/nginx/access.log
+maxretry = 5
+findtime = 300
+bantime = 3600
+
+# Nginx SQL injection
+[nginx-sqli]
+enabled = true
+port = http,https
+filter = nginx-sqli
+logpath = /var/log/nginx/access.log
+maxretry = 1
+findtime = 300
+bantime = 86400
+
+# Nginx XSS attempts
+[nginx-xss]
+enabled = true
+port = http,https
+filter = nginx-xss
+logpath = /var/log/nginx/access.log
+maxretry = 1
+findtime = 300
+bantime = 86400

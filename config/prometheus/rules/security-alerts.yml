@@ -1,0 +1,149 @@
+groups:
+  - name: security_alerts
+    rules:
+      # Высокая частота банов Fail2ban
+      - alert: HighFailBanRate
+        expr: rate(loki_promtail_read_lines_total{job="fail2ban"}[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High Fail2Ban activity detected"
+          description: "Fail2Ban is blocking more than 5 IPs per minute for {{ $labels.instance }}"
+
+      # Критическое количество банов
+      - alert: CriticalFailBanActivity
+        expr: rate(loki_promtail_read_lines_total{job="fail2ban"}[1m]) > 10
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Critical Fail2Ban activity - possible DDoS attack"
+          description: "Fail2Ban is blocking more than 10 IPs per minute for {{ $labels.instance }}"
+
+      # Высокая частота 403 ошибок
+      - alert: HighForbiddenRate
+        expr: rate(loki_promtail_read_lines_total{job="nginx", status="403"}[5m]) > 20
+        for: 3m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High 403 Forbidden rate detected"
+          description: "More than 20 forbidden requests per minute on {{ $labels.instance }}"
+
+      # Критическая частота 403 ошибок
+      - alert: CriticalForbiddenRate
+        expr: rate(loki_promtail_read_lines_total{job="nginx", status="403"}[1m]) > 50
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Critical 403 Forbidden rate - possible attack"
+          description: "More than 50 forbidden requests per minute on {{ $labels.instance }}"
+
+      # Высокая частота 404 ошибок (сканирование)
+      - alert: HighNotFoundScanActivity
+        expr: rate(loki_promtail_read_lines_total{job="nginx", status="404"}[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High 404 scanning activity detected"
+          description: "More than 100 not found requests per minute on {{ $labels.instance }} - possible scanning"
+
+      # Rate limiting срабатывания
+      - alert: RateLimitingActive
+        expr: rate(loki_promtail_read_lines_total{job="nginx", status="429"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: info
+          category: security
+        annotations:
+          summary: "Rate limiting is actively blocking requests"
+          description: "Rate limiting is blocking more than 10 requests per minute on {{ $labels.instance }}"
+
+      # ModSecurity алерты
+      - alert: ModSecurityAlertsHigh
+        expr: rate(loki_promtail_read_lines_total{job="modsecurity"}[5m]) > 5
+        for: 3m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High ModSecurity alert rate"
+          description: "ModSecurity is generating more than 5 alerts per minute on {{ $labels.instance }}"
+
+      # SQL injection попытки
+      # FIXME: These rules need to be moved to Loki LogQL, not Prometheus
+      # - alert: SQLInjectionAttempt
+      #   expr: increase(loki_promtail_read_lines_total{job="nginx"}[10m]) and on() loki_log_entries_total{job="nginx"} =~ ".*(?i)(union|select|insert|delete|update|drop|create|alter|exec|script|declare|@@|char\\(|0x[0-9a-f]+).*"
+      #   for: 0m
+      #   labels:
+      #     severity: critical
+      #     category: security
+      #   annotations:
+      #     summary: "SQL Injection attempt detected"
+      #     description: "Possible SQL injection attempt detected in logs for {{ $labels.instance }}"
+
+      # XSS попытки
+      # FIXME: These rules need to be moved to Loki LogQL, not Prometheus
+      # - alert: XSSAttempt
+      #   expr: increase(loki_promtail_read_lines_total{job="nginx"}[10m]) and on() loki_log_entries_total{job="nginx"} =~ ".*(?i)(javascript:|data:|vbscript:|onload|onerror|onclick|<script|</script|<iframe|<object|<embed|alert\\(|confirm\\(|prompt\\().*"
+      #   for: 0m
+      #   labels:
+      #     severity: critical
+      #     category: security
+      #   annotations:
+      #     summary: "XSS attempt detected"
+      #     description: "Possible XSS attempt detected in logs for {{ $labels.instance }}"
+
+      # Подозрительные User-Agent
+      # FIXME: These rules need to be moved to Loki LogQL, not Prometheus
+      # - alert: SuspiciousUserAgent
+      #   expr: increase(loki_promtail_read_lines_total{job="nginx"}[10m]) and on() loki_log_entries_total{job="nginx"} =~ ".*(masscan|nmap|sqlmap|nikto|wikto|sf|hydra|libwww-perl|curl|wget|python|Go-http-client|bot|spider|crawler).*"
+      #   for: 0m
+      #   labels:
+      #     severity: warning
+      #     category: security
+      #   annotations:
+      #     summary: "Suspicious User-Agent detected"
+      #     description: "Suspicious User-Agent detected in requests to {{ $labels.instance }}"
+
+      # Высокая нагрузка на админ панели
+      # FIXME: These rules need to be moved to Loki LogQL, not Prometheus
+      # - alert: AdminPanelHighLoad
+      #   expr: rate(loki_promtail_read_lines_total{job="nginx"}[5m]) and on() loki_log_entries_total{job="nginx"} =~ ".*/admin.*|.*/wp-admin.*|.*/bitrix/admin.*"
+      #   for: 5m
+      #   labels:
+      #     severity: warning
+      #     category: security
+      #   annotations:
+      #     summary: "High load on admin panels detected"
+      #     description: "High number of requests to admin panels detected for {{ $labels.instance }}"
+
+      # Fail2Ban сервис недоступен
+      - alert: Fail2BanDown
+        expr: up{job="fail2ban"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Fail2Ban service is down"
+          description: "Fail2Ban service is not running on {{ $labels.instance }} - security monitoring disabled"
+
+      # ModSecurity сервис недоступен
+      - alert: ModSecurityDown
+        expr: up{job="modsecurity"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "ModSecurity service is down"
+          description: "ModSecurity WAF service is not running on {{ $labels.instance }} - web firewall disabled"
