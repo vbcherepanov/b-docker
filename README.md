@@ -2,6 +2,8 @@
 
 Production-ready Docker окружение для 1С-Битрикс: Управление сайтом
 
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/vbcherepanov/b-docker)
+
 ## ✨ Ключевые особенности
 
 ### 🎯 Единый контейнер Bitrix
