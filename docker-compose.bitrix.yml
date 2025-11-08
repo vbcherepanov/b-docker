@@ -461,6 +461,7 @@ services:
 
     environment:
       TZ: ${TZ}
+      ENVIRONMENT: ${ENVIRONMENT}
 
     ports:
       - "${MAILHOG_PORT:-1025}:1025"
