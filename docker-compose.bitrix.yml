@@ -36,7 +36,7 @@ x-volumes:
     target: /home/${UGN}/app/bitrix/cache
 
   # Конфигурационные файлы
-  msmtp: &msmtp ./config/msmtp/msmtprc:/etc/msmtprc:ro
+  msmtp: &msmtp ./config/msmtp:/etc/msmtp:ro
   crontab: &crontab ./config/cron/crontab:/etc/crontabs/${UGN}
 
   # Логи (доступны и для хоста и для Promtail)
