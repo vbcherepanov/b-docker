@@ -43,6 +43,7 @@ REQUIRED_DIRS=(
     "/var/log/cron"
     "/var/log/supervisor"
     "/var/log/bitrix"
+    "/var/lib/php/sessions"
 )
 
 for dir in "${REQUIRED_DIRS[@]}"; do
@@ -81,6 +82,12 @@ chown -R "${UGN}:${UGN}" \
 
 # Supervisor логи
 chown -R "${UGN}:${UGN}" "/var/log/supervisor" 2>/dev/null || true
+
+# PHP Sessions - критично для работы Битрикс
+if [ -d "/var/lib/php/sessions" ]; then
+    chown -R "${UGN}:${UGN}" "/var/lib/php/sessions" 2>/dev/null || true
+    chmod 777 "/var/lib/php/sessions" 2>/dev/null || true
+fi
 
 echo -e "${GREEN}  ✓ Permissions configured${NC}"
 

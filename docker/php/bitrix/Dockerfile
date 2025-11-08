@@ -96,6 +96,8 @@ RUN mkdir -p \
     "/etc/supervisor/conf.d" \
     # Cron
     "/etc/crontabs" \
+    # PHP Sessions
+    "/var/lib/php/sessions" \
     && touch "/etc/crontabs/${UGN}"
 
 # ============================================================================
@@ -112,9 +114,10 @@ RUN chown -R "${UGN}:${UGN}" \
     "/var/log/bitrix" \
     "/var/run/supervisor" \
     "/etc/crontabs/${UGN}" \
+    "/var/lib/php/sessions" \
     && chmod 600 "/etc/crontabs/${UGN}" \
     && chmod -R 755 "/home/${UGN}/app" \
-    && chmod -R 777 "/home/${UGN}/app/upload" "/home/${UGN}/app/bitrix/cache" \
+    && chmod -R 777 "/home/${UGN}/app/upload" "/home/${UGN}/app/bitrix/cache" "/var/lib/php/sessions" \
     && chmod -R 755 "/home/${UGN}/tmp"
 
 # ============================================================================
