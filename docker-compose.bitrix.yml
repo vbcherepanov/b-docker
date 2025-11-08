@@ -166,6 +166,8 @@ services:
 
     depends_on:
       <<: *depends-on-all
+      nginx:
+        condition: service_started
 
     # Expose порт PHP-FPM для nginx
     expose:
