@@ -30,7 +30,7 @@ echo ""
 # ============================================================================
 # ПРОВЕРКА И СОЗДАНИЕ НЕОБХОДИМЫХ ДИРЕКТОРИЙ
 # ============================================================================
-echo -e "${YELLOW}[1/7] Checking directories...${NC}"
+echo -e "${YELLOW}[1/8] Checking directories...${NC}"
 
 REQUIRED_DIRS=(
     "/home/${UGN}/app"
@@ -58,7 +58,7 @@ echo -e "${GREEN}  ✓ Directories checked${NC}"
 # ============================================================================
 # НАСТРОЙКА ПРАВ ДОСТУПА
 # ============================================================================
-echo -e "${YELLOW}[2/7] Setting up permissions...${NC}"
+echo -e "${YELLOW}[2/8] Setting up permissions...${NC}"
 
 # Битрикс требует специфичные права на некоторые директории
 if [ -d "/home/${UGN}/app/upload" ]; then
@@ -94,7 +94,7 @@ echo -e "${GREEN}  ✓ Permissions configured${NC}"
 # ============================================================================
 # НАСТРОЙКА PHP-FPM
 # ============================================================================
-echo -e "${YELLOW}[3/7] Configuring PHP-FPM...${NC}"
+echo -e "${YELLOW}[3/8] Configuring PHP-FPM...${NC}"
 
 # Проверяем наличие конфигурации PHP-FPM
 if [ ! -f "/usr/local/etc/php-fpm.d/www.conf" ]; then
@@ -118,7 +118,7 @@ echo -e "${GREEN}  ✓ PHP-FPM configured (pm=${PHP_FPM_PM})${NC}"
 # ============================================================================
 # НАСТРОЙКА CRON
 # ============================================================================
-echo -e "${YELLOW}[4/7] Configuring cron...${NC}"
+echo -e "${YELLOW}[4/8] Configuring cron...${NC}"
 
 # Проверяем наличие crontab файла
 if [ -f "/etc/crontabs/${UGN}" ]; then
@@ -146,7 +146,7 @@ echo -e "${GREEN}  ✓ Cron configured${NC}"
 # ============================================================================
 # ПРОВЕРКА ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ
 # ============================================================================
-echo -e "${YELLOW}[5/7] Checking database connection...${NC}"
+echo -e "${YELLOW}[5/8] Checking database connection...${NC}"
 
 DB_HOST="${DB_HOST:-mysql}"
 DB_PORT="${DB_PORT:-3306}"
@@ -173,7 +173,7 @@ done
 # ============================================================================
 # ПРОВЕРКА ПОДКЛЮЧЕНИЯ К REDIS
 # ============================================================================
-echo -e "${YELLOW}[6/7] Checking Redis connection...${NC}"
+echo -e "${YELLOW}[6/8] Checking Redis connection...${NC}"
 
 REDIS_HOST="${REDIS_HOST:-redis}"
 REDIS_PORT="${REDIS_PORT:-6379}"
@@ -201,7 +201,7 @@ done
 # ============================================================================
 # COMPOSER (только для dev/local окружения)
 # ============================================================================
-echo -e "${YELLOW}[7/7] Checking Composer...${NC}"
+echo -e "${YELLOW}[7/8] Checking Composer...${NC}"
 
 if [ "${ENVIRONMENT}" != "prod" ] && [ "${ENVIRONMENT}" != "production" ]; then
     if [ -f "/home/${UGN}/app/composer.json" ]; then
@@ -212,6 +212,30 @@ if [ "${ENVIRONMENT}" != "prod" ] && [ "${ENVIRONMENT}" != "production" ]; then
 fi
 
 echo -e "${GREEN}  ✓ Composer checked${NC}"
+
+# ============================================================================
+# НАСТРОЙКА /etc/hosts ДЛЯ NGINX
+# ============================================================================
+echo -e "${YELLOW}[8/8] Configuring /etc/hosts for nginx access...${NC}"
+
+# Получаем IP адрес nginx контейнера
+NGINX_IP=$(getent hosts nginx | awk '{ print $1 }')
+
+if [ -n "$NGINX_IP" ]; then
+    # Docker /etc/hosts is bind-mounted and can't use sed -i
+    # Use grep to filter and write to temp file, then cat back
+    grep -v 'bitrix\.local' /etc/hosts > /tmp/hosts.tmp || true
+    cat /tmp/hosts.tmp > /etc/hosts
+
+    # Добавляем новую запись
+    echo "$NGINX_IP bitrix.local" >> /etc/hosts
+
+    rm -f /tmp/hosts.tmp
+
+    echo -e "${GREEN}  ✓ Added nginx IP ($NGINX_IP) to /etc/hosts as bitrix.local${NC}"
+else
+    echo -e "${YELLOW}  ⚠ Nginx container not found, skipping /etc/hosts update${NC}"
+fi
 
 # ============================================================================
 # ЗАПУСК ПЕРЕДАННОЙ КОМАНДЫ
