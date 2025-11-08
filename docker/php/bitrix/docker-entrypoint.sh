@@ -30,7 +30,7 @@ echo ""
 # ============================================================================
 # ПРОВЕРКА И СОЗДАНИЕ НЕОБХОДИМЫХ ДИРЕКТОРИЙ
 # ============================================================================
-echo -e "${YELLOW}[1/8] Checking directories...${NC}"
+echo -e "${YELLOW}[1/9] Checking directories...${NC}"
 
 REQUIRED_DIRS=(
     "/home/${UGN}/app"
@@ -58,7 +58,14 @@ echo -e "${GREEN}  ✓ Directories checked${NC}"
 # ============================================================================
 # НАСТРОЙКА ПРАВ ДОСТУПА
 # ============================================================================
-echo -e "${YELLOW}[2/8] Setting up permissions...${NC}"
+echo -e "${YELLOW}[2/9] Setting up permissions...${NC}"
+
+# Изменяем владельца файлов приложения для совместимости с macOS
+if [ -d "/home/${UGN}/app" ]; then
+    echo -e "${BLUE}  ⏳ Changing ownership of /home/${UGN}/app to ${UGN}...${NC}"
+    chown -R "${UGN}:${UGN}" "/home/${UGN}/app" 2>/dev/null || true
+    echo -e "${GREEN}  ✓ Ownership changed${NC}"
+fi
 
 # Битрикс требует специфичные права на некоторые директории
 if [ -d "/home/${UGN}/app/upload" ]; then
@@ -94,7 +101,7 @@ echo -e "${GREEN}  ✓ Permissions configured${NC}"
 # ============================================================================
 # НАСТРОЙКА PHP-FPM
 # ============================================================================
-echo -e "${YELLOW}[3/8] Configuring PHP-FPM...${NC}"
+echo -e "${YELLOW}[3/9] Configuring PHP-FPM...${NC}"
 
 # Проверяем наличие конфигурации PHP-FPM
 if [ ! -f "/usr/local/etc/php-fpm.d/www.conf" ]; then
@@ -118,7 +125,7 @@ echo -e "${GREEN}  ✓ PHP-FPM configured (pm=${PHP_FPM_PM})${NC}"
 # ============================================================================
 # НАСТРОЙКА CRON
 # ============================================================================
-echo -e "${YELLOW}[4/8] Configuring cron...${NC}"
+echo -e "${YELLOW}[4/9] Configuring cron...${NC}"
 
 # Проверяем наличие crontab файла
 if [ -f "/etc/crontabs/${UGN}" ]; then
@@ -146,7 +153,7 @@ echo -e "${GREEN}  ✓ Cron configured${NC}"
 # ============================================================================
 # ПРОВЕРКА ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ
 # ============================================================================
-echo -e "${YELLOW}[5/8] Checking database connection...${NC}"
+echo -e "${YELLOW}[5/9] Checking database connection...${NC}"
 
 DB_HOST="${DB_HOST:-mysql}"
 DB_PORT="${DB_PORT:-3306}"
@@ -173,7 +180,7 @@ done
 # ============================================================================
 # ПРОВЕРКА ПОДКЛЮЧЕНИЯ К REDIS
 # ============================================================================
-echo -e "${YELLOW}[6/8] Checking Redis connection...${NC}"
+echo -e "${YELLOW}[6/9] Checking Redis connection...${NC}"
 
 REDIS_HOST="${REDIS_HOST:-redis}"
 REDIS_PORT="${REDIS_PORT:-6379}"
@@ -201,7 +208,7 @@ done
 # ============================================================================
 # COMPOSER (только для dev/local окружения)
 # ============================================================================
-echo -e "${YELLOW}[7/8] Checking Composer...${NC}"
+echo -e "${YELLOW}[7/9] Checking Composer...${NC}"
 
 if [ "${ENVIRONMENT}" != "prod" ] && [ "${ENVIRONMENT}" != "production" ]; then
     if [ -f "/home/${UGN}/app/composer.json" ]; then
@@ -216,7 +223,7 @@ echo -e "${GREEN}  ✓ Composer checked${NC}"
 # ============================================================================
 # НАСТРОЙКА /etc/hosts ДЛЯ NGINX
 # ============================================================================
-echo -e "${YELLOW}[8/8] Configuring /etc/hosts for nginx access...${NC}"
+echo -e "${YELLOW}[8/9] Configuring /etc/hosts for nginx access...${NC}"
 
 # Небольшая задержка для инициализации Docker DNS
 sleep 2
@@ -261,6 +268,27 @@ if [ -n "$NGINX_IP" ]; then
 
     echo -e "${GREEN}  ✓ Added nginx IP ($NGINX_IP) to /etc/hosts as bitrix.local${NC}"
 fi
+
+# ============================================================================
+# АВТОГЕНЕРАЦИЯ session.cookie_secure НА ОСНОВЕ SSL
+# ============================================================================
+echo -e "${YELLOW}[9/9] Configuring session.cookie_secure...${NC}"
+
+SESSION_SECURE="Off"
+if [ "$SSL" = "1" ] || [ "$SSL" = "2" ]; then
+    SESSION_SECURE="On"
+    echo -e "${GREEN}  ✓ SSL enabled (SSL=$SSL), setting session.cookie_secure=On${NC}"
+else
+    echo -e "${YELLOW}  ⚠ SSL disabled (SSL=$SSL), setting session.cookie_secure=Off${NC}"
+fi
+
+# Создаем конфиг файл с правильным значением
+cat > /usr/local/etc/php/conf.d/99-session-security.ini <<EOF
+; Auto-generated session security settings based on SSL=${SSL}
+session.cookie_secure = ${SESSION_SECURE}
+EOF
+
+echo -e "${GREEN}  ✓ Session security configured: session.cookie_secure=${SESSION_SECURE}${NC}"
 
 # ============================================================================
 # ЗАПУСК ПЕРЕДАННОЙ КОМАНДЫ

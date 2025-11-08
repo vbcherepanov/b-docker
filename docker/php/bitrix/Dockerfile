@@ -29,7 +29,6 @@ ARG PHP_FPM_MAX_SPARE_SERVERS=35
 ARG PHP_MEMORY_LIMIT=256M
 ARG PHP_UPLOAD_MAX_FILESIZE=64M
 ARG PHP_POST_MAX_SIZE=64M
-ARG SESSION_COOKIE_SECURE=On
 
 # ============================================================================
 # ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
@@ -50,8 +49,7 @@ ENV ENVIRONMENT=${ENVIRONMENT} \
     PHP_FPM_MAX_SPARE_SERVERS=${PHP_FPM_MAX_SPARE_SERVERS} \
     PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT} \
     PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE} \
-    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE} \
-    SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE}
+    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE}
 
 # Безопасный shell
 SHELL ["/bin/sh", "-eux", "-o", "pipefail", "-c"]
@@ -136,12 +134,8 @@ RUN chown -R "${UGN}:${UGN}" \
 COPY /docker/common/php/php.ini.template /usr/local/etc/php/php.ini.template
 RUN envsubst < /usr/local/etc/php/php.ini.template > /usr/local/etc/php/php.ini
 
-# PHP conf.d - копируем файлы и применяем envsubst к bitrix.ini
+# PHP conf.d - копируем файлы (session.cookie_secure генерируется в entrypoint)
 COPY /docker/common/php/conf.d /usr/local/etc/php/conf.d
-RUN if [ -f /usr/local/etc/php/conf.d/bitrix.ini ]; then \
-      envsubst < /usr/local/etc/php/conf.d/bitrix.ini > /usr/local/etc/php/conf.d/bitrix.ini.tmp && \
-      mv /usr/local/etc/php/conf.d/bitrix.ini.tmp /usr/local/etc/php/conf.d/bitrix.ini; \
-    fi
 
 # PHP-FPM конфигурация
 COPY /docker/common/php/php-fpm.d /usr/local/etc/php-fpm.d

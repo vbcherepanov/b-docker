@@ -22,9 +22,9 @@ session.save_handler = files
 session.save_path = "/var/lib/php/sessions"
 session.gc_maxlifetime = 3600
 session.cookie_lifetime = 0
-session.cookie_secure = ${SESSION_COOKIE_SECURE}
 session.cookie_httponly = On
 session.cookie_samesite = "Lax"
+; session.cookie_secure auto-generated in 99-session-security.ini based on SSL variable
 
 ; OPcache
 opcache.enable = 1
