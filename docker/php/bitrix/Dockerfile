@@ -29,6 +29,7 @@ ARG PHP_FPM_MAX_SPARE_SERVERS=35
 ARG PHP_MEMORY_LIMIT=256M
 ARG PHP_UPLOAD_MAX_FILESIZE=64M
 ARG PHP_POST_MAX_SIZE=64M
+ARG SESSION_COOKIE_SECURE=Off
 
 # ============================================================================
 # ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
@@ -49,7 +50,8 @@ ENV ENVIRONMENT=${ENVIRONMENT} \
     PHP_FPM_MAX_SPARE_SERVERS=${PHP_FPM_MAX_SPARE_SERVERS} \
     PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT} \
     PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE} \
-    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE}
+    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE} \
+    SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE}
 
 # Безопасный shell
 SHELL ["/bin/sh", "-eux", "-o", "pipefail", "-c"]
@@ -122,7 +124,8 @@ RUN chown -R "${UGN}:${UGN}" \
     "/var/lib/php/sessions" \
     && chmod 600 "/etc/crontabs/${UGN}" \
     && chmod -R 755 "/home/${UGN}/app" \
-    && chmod -R 777 "/home/${UGN}/app/upload" "/home/${UGN}/app/bitrix/cache" "/var/lib/php/sessions" \
+    && chmod -R 775 "/home/${UGN}/app/upload" "/home/${UGN}/app/bitrix/cache" \
+    && chmod -R 770 "/var/lib/php/sessions" \
     && chmod -R 755 "/home/${UGN}/tmp"
 
 # ============================================================================
