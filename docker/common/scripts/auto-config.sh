@@ -408,7 +408,7 @@ zlib.output_compression = Off
 
 ; Безопасность
 expose_php = Off
-allow_url_fopen = On
+allow_url_fopen = Off
 allow_url_include = Off
 
 ; Временная зона

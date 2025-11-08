@@ -29,7 +29,7 @@ ARG PHP_FPM_MAX_SPARE_SERVERS=35
 ARG PHP_MEMORY_LIMIT=256M
 ARG PHP_UPLOAD_MAX_FILESIZE=64M
 ARG PHP_POST_MAX_SIZE=64M
-ARG SESSION_COOKIE_SECURE=Off
+ARG SESSION_COOKIE_SECURE=On
 
 # ============================================================================
 # ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
