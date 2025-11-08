@@ -19,6 +19,16 @@ ARG UID=1000
 ARG GID=1000
 ARG UGN=bitrix
 ARG DEBUG=0
+# PHP-FPM аргументы
+ARG PHP_FPM_PM=dynamic
+ARG PHP_FPM_MAX_CHILDREN=50
+ARG PHP_FPM_START_SERVERS=5
+ARG PHP_FPM_MIN_SPARE_SERVERS=5
+ARG PHP_FPM_MAX_SPARE_SERVERS=35
+# PHP аргументы
+ARG PHP_MEMORY_LIMIT=256M
+ARG PHP_UPLOAD_MAX_FILESIZE=64M
+ARG PHP_POST_MAX_SIZE=64M
 
 # ============================================================================
 # ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
@@ -32,14 +42,14 @@ ENV ENVIRONMENT=${ENVIRONMENT} \
     UID=${UID} \
     GID=${GID} \
     DEBUG=${DEBUG} \
-    PHP_FPM_PM=${PHP_FPM_PM:-dynamic} \
-    PHP_FPM_MAX_CHILDREN=${PHP_FPM_MAX_CHILDREN:-50} \
-    PHP_FPM_START_SERVERS=${PHP_FPM_START_SERVERS:-5} \
-    PHP_FPM_MIN_SPARE_SERVERS=${PHP_FPM_MIN_SPARE_SERVERS:-5} \
-    PHP_FPM_MAX_SPARE_SERVERS=${PHP_FPM_MAX_SPARE_SERVERS:-35} \
-    PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-256M} \
-    PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE:-64M} \
-    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE:-64M}
+    PHP_FPM_PM=${PHP_FPM_PM} \
+    PHP_FPM_MAX_CHILDREN=${PHP_FPM_MAX_CHILDREN} \
+    PHP_FPM_START_SERVERS=${PHP_FPM_START_SERVERS} \
+    PHP_FPM_MIN_SPARE_SERVERS=${PHP_FPM_MIN_SPARE_SERVERS} \
+    PHP_FPM_MAX_SPARE_SERVERS=${PHP_FPM_MAX_SPARE_SERVERS} \
+    PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT} \
+    PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE} \
+    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE}
 
 # Безопасный shell
 SHELL ["/bin/sh", "-eux", "-o", "pipefail", "-c"]
@@ -72,31 +82,26 @@ RUN apk add --no-cache \
 
 # ============================================================================
 # СОЗДАНИЕ СТРУКТУРЫ ДИРЕКТОРИЙ
+# Основные директории приложения, Битрикс, логи, Supervisor, Cron, PHP Sessions
 # ============================================================================
 RUN mkdir -p \
-    # Основные директории приложения
     "/home/${UGN}/app" \
     "/home/${UGN}/tmp" \
     "/home/${UGN}/run" \
     "/home/${UGN}/.composer" \
-    # Директории Битрикса (будут монтироваться извне)
     "/home/${UGN}/app/upload" \
     "/home/${UGN}/app/local" \
     "/home/${UGN}/app/bitrix/cache" \
     "/home/${UGN}/app/bitrix/backup" \
     "/home/${UGN}/app/bitrix/modules" \
-    # Директории логов
     "/var/log/php" \
     "/var/log/php-fpm" \
     "/var/log/cron" \
     "/var/log/supervisor" \
     "/var/log/bitrix" \
-    # Supervisor
     "/var/run/supervisor" \
     "/etc/supervisor/conf.d" \
-    # Cron
     "/etc/crontabs" \
-    # PHP Sessions
     "/var/lib/php/sessions" \
     && touch "/etc/crontabs/${UGN}"
 
