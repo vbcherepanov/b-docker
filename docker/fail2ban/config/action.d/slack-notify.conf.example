@@ -1,0 +1,24 @@
+# Пример custom action для отправки уведомлений в Slack
+# Переименуйте в .conf для использования
+
+[Definition]
+
+# Команда при бане IP
+actionban = curl -s -X POST <SLACK_WEBHOOK_URL> \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"🚫 Fail2Ban: IP <ip> banned for <name> attack. Ban time: <bantime>s"}'
+
+# Команда при разбане IP
+actionunban = curl -s -X POST <SLACK_WEBHOOK_URL> \
+              -H 'Content-Type: application/json' \
+              -d '{"text":"✅ Fail2Ban: IP <ip> unbanned from <name>"}'
+
+# Параметры
+[Init]
+name = default
+bantime = 600
+
+# Использование:
+# В jail.local добавьте:
+# action = %(action_mw)s
+#          slack-notify[name=%(__name__)s]
