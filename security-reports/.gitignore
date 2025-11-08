@@ -1,0 +1,10 @@
+# Игнорировать все отчеты безопасности
+*.html
+*.json
+*.txt
+*.xml
+*.pdf
+
+# Кроме README
+!README.md
+!.gitignore

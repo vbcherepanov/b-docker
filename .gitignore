@@ -8,3 +8,9 @@
 /ssl/*
 /volume/*
 .DS_Store
+
+# Security reports - содержат чувствительную информацию
+/security-reports/*.html
+/security-reports/*.json
+/security-reports/*.txt
+/security-reports/*.xml

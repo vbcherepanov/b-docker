@@ -1,0 +1,132 @@
+# ============================================================================
+# DOCKER COMPOSE - SECURITY SCANNERS
+# Инструменты для проверки безопасности Bitrix
+# ============================================================================
+#
+# Использование:
+#   Quick scan:  docker compose -f docker-compose.security.yml run --rm owasp-zap-baseline
+#   Full scan:   docker compose -f docker-compose.security.yml run --rm owasp-zap-full
+#   Nikto scan:  docker compose -f docker-compose.security.yml run --rm nikto
+#   SSL check:   docker compose -f docker-compose.security.yml run --rm testssl
+#   Trivy scan:  docker compose -f docker-compose.security.yml run --rm trivy
+#
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # OWASP ZAP - Web Application Security Scanner
+  # Сканирование веб-приложения на уязвимости OWASP Top 10
+  # ==========================================================================
+
+  owasp-zap-baseline:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: ${DOMAIN:-bitrix.local}_zap_baseline
+    command: zap-baseline.py -t http://nginx:80 -r /zap/reports/zap-baseline-report.html -I
+    volumes:
+      - ./security-reports:/zap/reports
+    networks:
+      - bitrix-network
+    profiles:
+      - security
+    environment:
+      - ZAP_PORT=8080
+
+  owasp-zap-full:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: ${DOMAIN:-bitrix.local}_zap_full
+    command: zap-full-scan.py -t http://nginx:80 -r /zap/reports/zap-full-report.html -I
+    volumes:
+      - ./security-reports:/zap/reports
+    networks:
+      - bitrix-network
+    profiles:
+      - security
+    environment:
+      - ZAP_PORT=8080
+
+  owasp-zap-api:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: ${DOMAIN:-bitrix.local}_zap_api
+    command: zap-api-scan.py -t http://nginx:80/rest/openapi.json -f openapi -r /zap/reports/zap-api-report.html -I
+    volumes:
+      - ./security-reports:/zap/reports
+    networks:
+      - bitrix-network
+    profiles:
+      - security
+
+  # ==========================================================================
+  # NIKTO - Web Server Scanner
+  # Сканирование веб-сервера на известные уязвимости
+  # ==========================================================================
+
+  nikto:
+    image: sullo/nikto
+    container_name: ${DOMAIN:-bitrix.local}_nikto
+    command: -h http://nginx:80 -o /tmp/nikto-report.html -Format html
+    volumes:
+      - ./security-reports:/tmp
+    networks:
+      - bitrix-network
+    profiles:
+      - security
+
+  # ==========================================================================
+  # TESTSSL.SH - SSL/TLS Security Scanner
+  # Проверка конфигурации SSL/TLS
+  # ==========================================================================
+
+  testssl:
+    image: drwetter/testssl.sh
+    container_name: ${DOMAIN:-bitrix.local}_testssl
+    command: --htmlfile /output/testssl-report.html nginx:443
+    volumes:
+      - ./security-reports:/output
+    networks:
+      - bitrix-network
+    profiles:
+      - security
+
+  # ==========================================================================
+  # TRIVY - Container Security Scanner
+  # Сканирование Docker образов на уязвимости
+  # ==========================================================================
+
+  trivy:
+    image: aquasec/trivy:latest
+    container_name: ${DOMAIN:-bitrix.local}_trivy
+    command: image --format json --output /reports/trivy-report.json bitrix-bitrix:latest
+    volumes:
+      - ./security-reports:/reports
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    profiles:
+      - security
+
+  # ==========================================================================
+  # CUSTOM BITRIX SECURITY CHECKER
+  # Bitrix-специфичные проверки безопасности
+  # ==========================================================================
+
+  bitrix-security-check:
+    image: ubuntu:latest
+    container_name: ${DOMAIN:-bitrix.local}_bitrix_check
+    command: bash /scripts/bitrix-security-check.sh
+    volumes:
+      - ./www:/app:ro
+      - ./security-scripts:/scripts:ro
+      - ./security-reports:/reports
+    networks:
+      - bitrix-network
+    profiles:
+      - security
+    environment:
+      - REPORT_FILE=/reports/bitrix-security.txt
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+
+networks:
+  bitrix-network:
+    external: true
+    name: ${DOMAIN:-bitrix.local}_network
