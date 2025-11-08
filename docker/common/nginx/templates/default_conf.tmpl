@@ -16,29 +16,7 @@ server {
 
     include /etc/nginx/snippets/header.conf;
     include /etc/nginx/snippets/resolver.conf;
-    include /etc/nginx/snippets/health.conf;
 
-    location / {
-            if ($request_method = OPTIONS) {
-                add_header 'Access-Control-Allow-Origin' '*' always;
-                add_header 'Access-Control-Allow-Credentials' 'true' always;
-                add_header 'Access-Control-Allow-Methods' 'GET,POST,PUT,DELETE,HEAD,OPTIONS' always;
-                add_header 'Access-Control-Allow-Headers' 'Origin,Content-Type,Accept,Authorization' always;
-                add_header 'Content-Type' 'text/plain charset=UTF-8';
-                add_header 'Content-Length' 0;
-                return 204;
-            }
-            try_files $uri /index.php?$args;
-    }
-
-    location ~ \.php$ {
-        set $upstream bitrix:9000;
-        fastcgi_split_path_info ^(.+\.php)(/.+)$;
-        fastcgi_pass $upstream;
-        fastcgi_index index.php;
-        fastcgi_read_timeout 300;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        fastcgi_param PATH_INFO $fastcgi_path_info;
-    }
+    # Полная конфигурация Bitrix (включает .htaccess правила)
+    include /etc/nginx/snippets/bitrix.conf;
 }
