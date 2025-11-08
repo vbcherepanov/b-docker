@@ -135,7 +135,13 @@ RUN chown -R "${UGN}:${UGN}" \
 # PHP конфигурация
 COPY /docker/common/php/php.ini.template /usr/local/etc/php/php.ini.template
 RUN envsubst < /usr/local/etc/php/php.ini.template > /usr/local/etc/php/php.ini
+
+# PHP conf.d - копируем файлы и применяем envsubst к bitrix.ini
 COPY /docker/common/php/conf.d /usr/local/etc/php/conf.d
+RUN if [ -f /usr/local/etc/php/conf.d/bitrix.ini ]; then \
+      envsubst < /usr/local/etc/php/conf.d/bitrix.ini > /usr/local/etc/php/conf.d/bitrix.ini.tmp && \
+      mv /usr/local/etc/php/conf.d/bitrix.ini.tmp /usr/local/etc/php/conf.d/bitrix.ini; \
+    fi
 
 # PHP-FPM конфигурация
 COPY /docker/common/php/php-fpm.d /usr/local/etc/php-fpm.d
