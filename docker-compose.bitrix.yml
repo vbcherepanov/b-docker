@@ -237,9 +237,8 @@ services:
       - ./config/nginx/conf:/etc/nginx/conf.d
       - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
 
-    depends_on:
-      bitrix:
-        condition: service_healthy
+    # depends_on убран чтобы избежать циклической зависимости с bitrix
+    # nginx может запускаться независимо и будет отдавать 502 пока PHP-FPM недоступен
 
     ports:
       - "${HTTP_PORT:-80}:8080"

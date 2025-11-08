@@ -218,9 +218,31 @@ echo -e "${GREEN}  ✓ Composer checked${NC}"
 # ============================================================================
 echo -e "${YELLOW}[8/8] Configuring /etc/hosts for nginx access...${NC}"
 
-# Получаем IP адрес nginx контейнера
-NGINX_IP=$(getent hosts nginx | awk '{ print $1 }')
+# Ждем доступности nginx контейнера
+MAX_TRIES=15
+COUNT=0
+NGINX_IP=""
 
+while [ $COUNT -lt $MAX_TRIES ]; do
+    NGINX_IP=$(getent hosts nginx 2>/dev/null | awk '{ print $1 }')
+
+    if [ -n "$NGINX_IP" ]; then
+        echo -e "${GREEN}  ✓ Nginx container found at ${NGINX_IP}${NC}"
+        break
+    fi
+
+    COUNT=$((COUNT + 1))
+    if [ $COUNT -eq $MAX_TRIES ]; then
+        echo -e "${YELLOW}  ⚠ Nginx container not found after ${MAX_TRIES} attempts${NC}"
+        echo -e "${YELLOW}  ⚠ Skipping /etc/hosts update${NC}"
+        break
+    else
+        echo -e "${YELLOW}  ⏳ Waiting for nginx... (${COUNT}/${MAX_TRIES})${NC}"
+        sleep 1
+    fi
+done
+
+# Обновляем /etc/hosts если нашли nginx
 if [ -n "$NGINX_IP" ]; then
     # Docker /etc/hosts is bind-mounted and can't use sed -i
     # Use grep to filter and write to temp file, then cat back
@@ -233,8 +255,6 @@ if [ -n "$NGINX_IP" ]; then
     rm -f /tmp/hosts.tmp
 
     echo -e "${GREEN}  ✓ Added nginx IP ($NGINX_IP) to /etc/hosts as bitrix.local${NC}"
-else
-    echo -e "${YELLOW}  ⚠ Nginx container not found, skipping /etc/hosts update${NC}"
 fi
 
 # ============================================================================
