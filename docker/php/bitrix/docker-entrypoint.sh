@@ -218,8 +218,11 @@ echo -e "${GREEN}  ✓ Composer checked${NC}"
 # ============================================================================
 echo -e "${YELLOW}[8/8] Configuring /etc/hosts for nginx access...${NC}"
 
+# Небольшая задержка для инициализации Docker DNS
+sleep 2
+
 # Ждем доступности nginx контейнера
-MAX_TRIES=15
+MAX_TRIES=30
 COUNT=0
 NGINX_IP=""
 
@@ -233,11 +236,13 @@ while [ $COUNT -lt $MAX_TRIES ]; do
 
     COUNT=$((COUNT + 1))
     if [ $COUNT -eq $MAX_TRIES ]; then
-        echo -e "${YELLOW}  ⚠ Nginx container not found after ${MAX_TRIES} attempts${NC}"
+        echo -e "${YELLOW}  ⚠ Nginx container not found after ${MAX_TRIES} attempts (${COUNT} seconds)${NC}"
         echo -e "${YELLOW}  ⚠ Skipping /etc/hosts update${NC}"
         break
     else
-        echo -e "${YELLOW}  ⏳ Waiting for nginx... (${COUNT}/${MAX_TRIES})${NC}"
+        if [ $((COUNT % 5)) -eq 0 ]; then
+            echo -e "${YELLOW}  ⏳ Waiting for nginx... (${COUNT}/${MAX_TRIES})${NC}"
+        fi
         sleep 1
     fi
 done
