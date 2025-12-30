@@ -292,6 +292,43 @@ EOF
 echo -e "${GREEN}  ✓ Session security configured: session.cookie_secure=${SESSION_SECURE}${NC}"
 
 # ============================================================================
+# ДОБАВЛЕНИЕ ВНУТРЕННЕГО SSL СЕРТИФИКАТА В ДОВЕРЕННЫЕ
+# ============================================================================
+echo -e "${YELLOW}[10/10] Adding internal SSL certificate to trusted CA...${NC}"
+
+# Ждём nginx и получаем его SSL сертификат
+if [ -n "$NGINX_IP" ]; then
+    MAX_TRIES=30
+    COUNT=0
+    CERT_ADDED=false
+
+    while [ $COUNT -lt $MAX_TRIES ]; do
+        # Пытаемся получить сертификат от nginx
+        NGINX_CERT=$(echo | timeout 5 openssl s_client -connect "${NGINX_IP}:443" -servername "${DOMAIN}" 2>/dev/null | openssl x509 2>/dev/null)
+
+        if [ -n "$NGINX_CERT" ]; then
+            # Добавляем сертификат в CA bundle PHP
+            echo "$NGINX_CERT" >> /etc/ssl/cert.pem
+            echo -e "${GREEN}  ✓ Internal nginx SSL certificate added to PHP CA bundle${NC}"
+            CERT_ADDED=true
+            break
+        fi
+
+        COUNT=$((COUNT + 1))
+        if [ $COUNT -eq $MAX_TRIES ]; then
+            echo -e "${YELLOW}  ⚠ Could not get nginx SSL certificate after ${MAX_TRIES} attempts${NC}"
+        else
+            if [ $((COUNT % 10)) -eq 0 ]; then
+                echo -e "${YELLOW}  ⏳ Waiting for nginx SSL... (${COUNT}/${MAX_TRIES})${NC}"
+            fi
+            sleep 1
+        fi
+    done
+else
+    echo -e "${YELLOW}  ⚠ Nginx IP not found, skipping SSL certificate trust${NC}"
+fi
+
+# ============================================================================
 # ЗАПУСК ПЕРЕДАННОЙ КОМАНДЫ
 # ============================================================================
 echo ""
