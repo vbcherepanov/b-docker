@@ -371,6 +371,42 @@ services:
       - "monitoring=true"
 
   # ==========================================================================
+  # PUSH SERVER - REAL-TIME NOTIFICATIONS
+  # ==========================================================================
+  push-server:
+    container_name: ${DOMAIN}_push_server
+    build:
+      context: .
+      dockerfile: docker/push-server/Dockerfile
+
+    environment:
+      - TZ=${TZ}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - SECURITY_KEY=${PUSH_SERVER_KEY:-}
+
+    volumes:
+      - ./config/push-server/config.json:/opt/push-server/config.json:ro
+
+    ports:
+      - "${PUSH_PUB_PORT:-9010}:9010"
+      - "${PUSH_SUB_PORT:-8010}:8010"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    depends_on:
+      - redis
+
+    labels:
+      - "com.docker.compose.service=push-server"
+
+  # ==========================================================================
   # MEMCACHED - ДОПОЛНИТЕЛЬНОЕ КЭШИРОВАНИЕ
   # ==========================================================================
   memcached:
@@ -636,6 +672,171 @@ services:
 
     labels:
       - "com.docker.compose.service=node-exporter"
+
+  # --------------------------------------------------------------------------
+  # NGINX EXPORTER
+  # --------------------------------------------------------------------------
+  nginx-exporter:
+    container_name: ${DOMAIN}_nginx_exporter
+    image: nginx/nginx-prometheus-exporter:1.1
+
+    command:
+      - '-nginx.scrape-uri=http://nginx:8080/nginx_status'
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=nginx-exporter"
+
+  # --------------------------------------------------------------------------
+  # PHP-FPM EXPORTER
+  # --------------------------------------------------------------------------
+  php-fpm-exporter:
+    container_name: ${DOMAIN}_php_fpm_exporter
+    image: hipages/php-fpm_exporter:2
+
+    environment:
+      - PHP_FPM_SCRAPE_URI=tcp://nginx:8080/status
+      - PHP_FPM_FIX_PROCESS_COUNT=true
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=php-fpm-exporter"
+
+  # --------------------------------------------------------------------------
+  # REDIS EXPORTER
+  # --------------------------------------------------------------------------
+  redis-exporter:
+    container_name: ${DOMAIN}_redis_exporter
+    image: oliver006/redis_exporter:v1.58.0
+
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=redis-exporter"
+
+  # --------------------------------------------------------------------------
+  # RABBITMQ EXPORTER
+  # --------------------------------------------------------------------------
+  rabbitmq-exporter:
+    container_name: ${DOMAIN}_rabbitmq_exporter
+    image: kbudde/rabbitmq-exporter:v1.0.0-RC19
+
+    environment:
+      - RABBIT_URL=http://amqp:15672
+      - RABBIT_USER=${RABBITMQ_DEFAULT_USER:-rabbitmq}
+      - RABBIT_PASSWORD=${RABBITMQ_DEFAULT_PASS:-rabbitmq}
+      - PUBLISH_PORT=9419
+      - OUTPUT_FORMAT=prometheus
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - rabbitmq
+      - full
+
+    labels:
+      - "com.docker.compose.service=rabbitmq-exporter"
+
+  # --------------------------------------------------------------------------
+  # MYSQL/MARIADB EXPORTER
+  # --------------------------------------------------------------------------
+  mysql-exporter:
+    container_name: ${DOMAIN}_mysql_exporter
+    image: prom/mysqld-exporter:v0.15.1
+
+    environment:
+      - MYSQLD_EXPORTER_PASSWORD=${DB_PASSWORD}
+
+    command:
+      - "--mysqld.address=mysql:3306"
+      - "--mysqld.username=exporter"
+      - "--collect.info_schema.tables"
+      - "--collect.info_schema.innodb_metrics"
+      - "--collect.global_status"
+      - "--collect.global_variables"
+      - "--collect.slave_status"
+      - "--collect.info_schema.processlist"
+      - "--collect.perf_schema.tablelocks"
+      - "--collect.auto_increment.columns"
+      - "--collect.binlog_size"
+      - "--collect.engine_innodb_status"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=mysql-exporter"
+
+  # --------------------------------------------------------------------------
+  # MEMCACHED EXPORTER
+  # --------------------------------------------------------------------------
+  memcached-exporter:
+    container_name: ${DOMAIN}_memcached_exporter
+    image: prom/memcached-exporter:v0.14.4
+
+    command:
+      - "--memcached.address=memcached:11211"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    profiles:
+      - monitoring
+      - full
+
+    labels:
+      - "com.docker.compose.service=memcached-exporter"
 
   # ==========================================================================
   # БЭКАПЫ

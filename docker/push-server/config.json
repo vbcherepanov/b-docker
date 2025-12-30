@@ -1,0 +1,44 @@
+{
+  "options": {
+    "clientTimeout": 10,
+    "serverTimeout": 10
+  },
+  "security": {
+    "key": "PUSH_SERVER_KEY_PLACEHOLDER"
+  },
+  "redis": {
+    "host": "redis",
+    "port": 6379,
+    "password": ""
+  },
+  "servers": {
+    "pub": {
+      "host": "0.0.0.0",
+      "port": 9010,
+      "routes": {
+        "/bitrix/pub/": {
+          "handler": "pub",
+          "options": {}
+        }
+      }
+    },
+    "sub": {
+      "host": "0.0.0.0",
+      "port": 8010,
+      "routes": {
+        "/bitrix/subws/": {
+          "handler": "sub-ws",
+          "options": {}
+        },
+        "/bitrix/sub/": {
+          "handler": "sub",
+          "options": {}
+        },
+        "/server-stat/": {
+          "handler": "server-stat",
+          "options": {}
+        }
+      }
+    }
+  }
+}
