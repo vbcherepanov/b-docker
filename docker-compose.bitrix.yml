@@ -167,7 +167,9 @@ services:
     depends_on:
       <<: *depends-on-all
       nginx:
-        condition: service_started
+        condition: service_healthy
+      mailhog:
+        condition: service_healthy
 
     # Expose порт PHP-FPM для nginx
     expose:
@@ -254,9 +256,10 @@ services:
     logging: *default-logging
 
     healthcheck:
-      test: ["CMD", "nginx", "-t"]
-      interval: 60s
+      test: ["CMD-SHELL", "curl -f http://localhost:80/health || exit 1"]
+      interval: 10s
       timeout: 5s
+      start_period: 10s
       retries: 3
 
     labels:
@@ -514,6 +517,13 @@ services:
     profiles:
       - local
       - dev
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8025/api/v2/messages || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
 
     labels:
       - "com.docker.compose.service=mailhog"
