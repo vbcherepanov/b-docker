@@ -258,12 +258,19 @@ done
 if [ -n "$NGINX_IP" ]; then
     # Docker /etc/hosts is bind-mounted and can't use sed -i
     # Use grep to filter and write to temp file, then cat back
-    grep -v 'bitrix\.local' /etc/hosts | grep -v "${DOMAIN}" > /tmp/hosts.tmp || true
+    grep -v 'bitrix\.local' /etc/hosts | grep -v "${DOMAIN}" | grep -v 'mailhog' > /tmp/hosts.tmp || true
     cat /tmp/hosts.tmp > /etc/hosts
 
     # Добавляем записи для локального доступа и основного домена
     echo "$NGINX_IP bitrix.local" >> /etc/hosts
     echo "$NGINX_IP ${DOMAIN}" >> /etc/hosts
+
+    # Добавляем mailhog для корректной работы почты
+    MAILHOG_IP=$(getent hosts mailhog 2>/dev/null | awk '{ print $1 }')
+    if [ -n "$MAILHOG_IP" ]; then
+        echo "$MAILHOG_IP mailhog" >> /etc/hosts
+        echo -e "${GREEN}  ✓ Added mailhog IP ($MAILHOG_IP) to /etc/hosts${NC}"
+    fi
 
     rm -f /tmp/hosts.tmp
 
