@@ -1,0 +1,124 @@
+<?php
+/**
+ * Bitrix .settings.php example with Redis password support
+ *
+ * Copy this file to www/bitrix/.settings.php after Bitrix installation
+ * and adjust values according to your environment.
+ *
+ * IMPORTANT: Redis password must match REDIS_PASSWORD from .env
+ */
+return [
+    // ==========================================================================
+    // CACHE CONFIGURATION (Redis)
+    // ==========================================================================
+    'cache' => [
+        'value' => [
+            'type' => [
+                'class_name' => '\\Bitrix\\Main\\Data\\CacheEngineRedis',
+                'extension' => 'redis',
+            ],
+            'redis' => [
+                'host' => getenv('REDIS_HOST') ?: 'redis',
+                'port' => (int)(getenv('REDIS_PORT') ?: 6379),
+                'password' => getenv('REDIS_PASSWORD') ?: '',  // <-- REQUIRED for auth
+            ],
+            'sid' => getenv('DOMAIN') ?: 'bitrix',
+        ],
+    ],
+
+    // ==========================================================================
+    // SESSION CONFIGURATION (Redis)
+    // ==========================================================================
+    'session' => [
+        'value' => [
+            'mode' => 'default',
+            'handlers' => [
+                'general' => [
+                    'type' => 'redis',
+                    'host' => getenv('REDIS_HOST') ?: 'redis',
+                    'port' => (int)(getenv('REDIS_PORT') ?: 6379),
+                    'password' => getenv('REDIS_PASSWORD') ?: '',  // <-- REQUIRED for auth
+                ],
+            ],
+        ],
+    ],
+
+    // ==========================================================================
+    // DATABASE CONFIGURATION
+    // ==========================================================================
+    'connections' => [
+        'value' => [
+            'default' => [
+                'className' => '\\Bitrix\\Main\\DB\\MysqliConnection',
+                'host' => getenv('DB_HOST') ?: 'mysql',
+                'database' => getenv('DB_NAME') ?: 'bitrix',
+                'login' => getenv('DB_USERNAME') ?: 'bitrix',
+                'password' => getenv('DB_PASSWORD') ?: '',
+                'options' => 2,
+            ],
+        ],
+    ],
+
+    // ==========================================================================
+    // EXCEPTION HANDLING
+    // ==========================================================================
+    'exception_handling' => [
+        'value' => [
+            'debug' => (bool)(getenv('DEBUG') ?: false),
+            'handled_errors_types' => E_ALL & ~E_NOTICE & ~E_STRICT & ~E_USER_NOTICE,
+            'exception_errors_types' => E_ALL & ~E_NOTICE & ~E_WARNING & ~E_STRICT & ~E_USER_WARNING & ~E_USER_NOTICE & ~E_COMPILE_WARNING,
+            'ignore_silence' => false,
+            'assertion_throws_exception' => true,
+            'assertion_error_type' => E_USER_WARNING,
+            'log' => [
+                'settings' => [
+                    'file' => '/var/log/bitrix/exception.log',
+                    'log_size' => 1000000,
+                ],
+            ],
+        ],
+    ],
+
+    // ==========================================================================
+    // CRYPTO KEY (generate unique for each installation)
+    // ==========================================================================
+    'crypto' => [
+        'value' => [
+            'crypto_key' => getenv('BITRIX_CRYPTO_KEY') ?: 'your-unique-crypto-key-here',
+        ],
+    ],
+
+    // ==========================================================================
+    // COOKIES
+    // ==========================================================================
+    'cookies' => [
+        'value' => [
+            'secure' => false,
+            'http_only' => true,
+        ],
+    ],
+
+    // ==========================================================================
+    // PULL & PUSH (if enabled)
+    // ==========================================================================
+    // Uncomment if using Bitrix Push server
+    /*
+    'pull' => [
+        'value' => [
+            'path_to_listener' => 'http://localhost:8010/bitrix/sub/',
+            'path_to_listener_secure' => 'https://localhost:8010/bitrix/sub/',
+            'path_to_modern_listener' => 'http://localhost:8010/bitrix/sub/',
+            'path_to_modern_listener_secure' => 'https://localhost:8010/bitrix/sub/',
+            'path_to_mobile_listener' => 'http://localhost:8010/bitrix/sub/',
+            'path_to_mobile_listener_secure' => 'https://localhost:8010/bitrix/sub/',
+            'path_to_websocket' => 'ws://localhost:8010/bitrix/subws/',
+            'path_to_websocket_secure' => 'wss://localhost:8010/bitrix/subws/',
+            'path_to_publish' => 'http://push-server:9010/bitrix/pub/',
+            'nginx_version' => '4',
+            'nginx_command_per_hit' => '100',
+            'nginx' => 'Y',
+            'push_message_per_hit' => '100',
+        ],
+    ],
+    */
+];

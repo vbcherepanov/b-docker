@@ -8,28 +8,28 @@ RUN apk add --no-cache \
     tar \
     gzip \
     rsync \
-    dcron \
     tzdata
 
 # Создание пользователя для бэкапов
-RUN addgroup -S backup && adduser -S backup -G backup
+RUN addgroup -g 1000 -S backup && adduser -u 1000 -S backup -G backup
 
 # Создание директорий
-RUN mkdir -p /backups /scripts /etc/backup
+RUN mkdir -p /backups /scripts /etc/backup /var/spool/cron/crontabs
 
 # Копирование скриптов
 COPY config/backup/backup.sh /scripts/backup.sh
 COPY config/backup/cleanup.sh /scripts/cleanup.sh
-COPY config/backup/crontab /etc/crontabs/backup
+COPY config/backup/crontab /var/spool/cron/crontabs/root
 
 # Установка прав
-RUN chmod +x /scripts/*.sh
-RUN chown -R backup:backup /backups /scripts
+RUN chmod +x /scripts/*.sh && \
+    chown -R backup:backup /backups /scripts && \
+    chmod 0600 /var/spool/cron/crontabs/root
 
 # Установка временной зоны
 ARG TZ
 ENV TZ=${TZ:-UTC}
 RUN ln -snf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime && echo ${TZ:-UTC} > /etc/timezone
 
-# Запуск cron демона
-CMD ["crond", "-f", "-d", "8"]
+# Запуск busybox crond (foreground, логи в stdout)
+CMD ["crond", "-f", "-l", "2"]
