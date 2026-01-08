@@ -170,6 +170,7 @@ services:
         condition: service_healthy
       mailhog:
         condition: service_healthy
+        required: false
 
     # Expose порт PHP-FPM для nginx
     expose:

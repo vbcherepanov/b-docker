@@ -4,9 +4,9 @@ ifneq ("$(wildcard .env)","")
   export
 endif
 
-DOCKER_COMPOSE = docker compose
-DOCKER_COMPOSE_LOCAL = docker compose --profile local --profile dev
-DOCKER_COMPOSE_PROD = docker compose --profile prod --profile monitoring --profile backup
+DOCKER_COMPOSE = docker compose -f docker-compose.bitrix.yml
+DOCKER_COMPOSE_LOCAL = docker compose -f docker-compose.bitrix.yml --profile local --profile dev
+DOCKER_COMPOSE_PROD = docker compose -f docker-compose.bitrix.yml --profile prod --profile monitoring --profile backup
 UID ?= $(shell id -u)
 GID ?= $(shell id -g)
 UGN ?=bitrix
