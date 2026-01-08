@@ -81,7 +81,6 @@ x-bitrix-env: &bitrix-env
   # Cache
   REDIS_HOST: ${REDIS_HOST:-redis}
   REDIS_PORT: ${REDIS_PORT:-6379}
-  REDIS_PASSWORD: ${REDIS_PASSWORD}
   MEMCACHED_HOST: ${MEMCACHED_HOST:-memcached}
   MEMCACHED_PORT: 11211
   # Queue (if RabbitMQ enabled)
@@ -346,7 +345,6 @@ services:
 
     environment:
       TZ: ${TZ}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
 
     volumes:
       - redis-data:/data
@@ -705,8 +703,6 @@ services:
 
     environment:
       - REDIS_ADDR=redis://redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-
     networks:
       - bitrix-network
 
