@@ -490,7 +490,7 @@ auto-config-manual:
 # Показать помощь по управлению сайтами
 help-sites:
 	@echo "Команды управления сайтами:"
-	@echo "  make site-add DOMAIN=example.com [PHP_VERSION=8.3]  - Добавить сайт"
+	@echo "  make site-add DOMAIN=example.com [PHP_VERSION=8.3]  - Добавить сайт (PHP: 7.4, 8.3, 8.4)"
 	@echo "  make site-remove DOMAIN=example.com                 - Удалить сайт"
 	@echo "  make site-list                                      - Список сайтов"
 	@echo "  make bitrix-site DOMAIN=example.com                 - Создать Bitrix сайт"

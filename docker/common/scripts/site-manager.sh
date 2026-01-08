@@ -28,7 +28,7 @@ show_help() {
 Переменные окружения:
     ENVIRONMENT - окружение (local/dev/prod)
     UGN - пользователь (по умолчанию: bitrix)
-    PHP_VERSION - версия PHP по умолчанию (7.4 или 8.3)
+    PHP_VERSION - версия PHP по умолчанию (7.4, 8.3 или 8.4)
 EOF
 }
 
@@ -63,8 +63,8 @@ add_site() {
     fi
 
     # Проверка версии PHP
-    if [[ "$php_version" != "7.4" && "$php_version" != "8.3" ]]; then
-        log "ОШИБКА: Поддерживаются только версии PHP 7.4 и 8.3"
+    if [[ "$php_version" != "7.4" && "$php_version" != "8.3" && "$php_version" != "8.4" ]]; then
+        log "ОШИБКА: Поддерживаются только версии PHP 7.4, 8.3 и 8.4"
         exit 1
     fi
 
