@@ -68,16 +68,18 @@ if [ -d "/home/${UGN}/app" ]; then
 fi
 
 # Битрикс требует специфичные права на некоторые директории
+# ВАЖНО: 775 вместо 777 для безопасности
+# Владелец bitrix имеет полный доступ, группа тоже, остальные только чтение+execute
 if [ -d "/home/${UGN}/app/upload" ]; then
-    chmod -R 777 "/home/${UGN}/app/upload" 2>/dev/null || true
+    chmod -R 775 "/home/${UGN}/app/upload" 2>/dev/null || true
 fi
 
 if [ -d "/home/${UGN}/app/bitrix/cache" ]; then
-    chmod -R 777 "/home/${UGN}/app/bitrix/cache" 2>/dev/null || true
+    chmod -R 775 "/home/${UGN}/app/bitrix/cache" 2>/dev/null || true
 fi
 
 if [ -d "/home/${UGN}/app/bitrix/managed_cache" ]; then
-    chmod -R 777 "/home/${UGN}/app/bitrix/managed_cache" 2>/dev/null || true
+    chmod -R 775 "/home/${UGN}/app/bitrix/managed_cache" 2>/dev/null || true
 fi
 
 # Логи должны быть доступны для записи
@@ -91,9 +93,10 @@ chown -R "${UGN}:${UGN}" \
 chown -R "${UGN}:${UGN}" "/var/log/supervisor" 2>/dev/null || true
 
 # PHP Sessions - критично для работы Битрикс
+# 770 - только владелец и группа имеют доступ (безопасность)
 if [ -d "/var/lib/php/sessions" ]; then
     chown -R "${UGN}:${UGN}" "/var/lib/php/sessions" 2>/dev/null || true
-    chmod 777 "/var/lib/php/sessions" 2>/dev/null || true
+    chmod 770 "/var/lib/php/sessions" 2>/dev/null || true
 fi
 
 echo -e "${GREEN}  ✓ Permissions configured${NC}"
