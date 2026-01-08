@@ -372,6 +372,84 @@ services:
       - "monitoring=true"
 
   # ==========================================================================
+  # PUSH SERVER - REAL-TIME УВЕДОМЛЕНИЯ
+  # ==========================================================================
+  # Push & Pull модуль Bitrix для мгновенных уведомлений, чата, живой ленты
+  # Документация: https://dev.1c-bitrix.ru/learning/course/index.php?COURSE_ID=41&LESSON_ID=2033
+
+  # Сервис подписок (клиенты подключаются сюда через WebSocket)
+  push-sub:
+    image: quay.io/bitrix24/push:3.1-v1-alpine
+    container_name: ${DOMAIN}_push_sub
+
+    environment:
+      - PUSH_SECURITY_KEY=${PUSH_SECURITY_KEY:-}
+      - PUSH_SUB_PORT=8010
+      - PUSH_SUB_MODE=sub
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8010/server-stat/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    profiles:
+      - push
+      - full
+
+    labels:
+      - "com.docker.compose.service=push-sub"
+
+  # Сервис публикации (PHP отправляет сюда события)
+  push-pub:
+    image: quay.io/bitrix24/push:3.1-v1-alpine
+    container_name: ${DOMAIN}_push_pub
+
+    environment:
+      - PUSH_SECURITY_KEY=${PUSH_SECURITY_KEY:-}
+      - PUSH_PUB_PORT=9010
+      - PUSH_PUB_MODE=pub
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9010/server-stat/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    profiles:
+      - push
+      - full
+
+    labels:
+      - "com.docker.compose.service=push-pub"
+
+  # ==========================================================================
   # MEMCACHED - ДОПОЛНИТЕЛЬНОЕ КЭШИРОВАНИЕ
   # ==========================================================================
   memcached:
