@@ -353,6 +353,24 @@ ssl-remove:
 	fi
 	@./docker/common/scripts/site-manager.sh ssl "$(DOMAIN)" remove
 
+# Получение SSL сертификата от Let's Encrypt
+# Использование: make ssl-letsencrypt EMAIL=admin@example.com
+ssl-letsencrypt:
+	@if [ -z "$(EMAIL)" ]; then \
+		echo "ОШИБКА: Необходимо указать EMAIL. Пример: make ssl-letsencrypt EMAIL=admin@example.com"; \
+		exit 1; \
+	fi
+	@chmod +x ./config/certbot/init-ssl.sh
+	@./config/certbot/init-ssl.sh "$(EMAIL)" "$(DOMAIN)"
+
+# Обновление SSL сертификата Let's Encrypt
+ssl-renew:
+	@certbot renew
+
+# Проверка обновления SSL (dry-run)
+ssl-renew-test:
+	@certbot renew --dry-run
+
 # ==========================================
 # СИСТЕМА БЭКАПОВ
 # ==========================================
@@ -479,8 +497,11 @@ help-sites:
 	@echo "  make site-clone FROM=source.com TO=target.com       - Клонировать сайт"
 	@echo ""
 	@echo "Команды SSL:"
-	@echo "  make ssl-generate DOMAIN=example.com                - Создать SSL сертификат"
+	@echo "  make ssl-generate DOMAIN=example.com                - Создать самоподписанный SSL"
 	@echo "  make ssl-remove DOMAIN=example.com                  - Удалить SSL сертификат"
+	@echo "  make ssl-letsencrypt EMAIL=admin@example.com        - Получить Let's Encrypt SSL"
+	@echo "  make ssl-renew                                      - Обновить Let's Encrypt SSL"
+	@echo "  make ssl-renew-test                                 - Тест обновления (dry-run)"
 
 # Показать помощь по бэкапам
 help-backup:

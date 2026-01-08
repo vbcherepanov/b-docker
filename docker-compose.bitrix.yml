@@ -375,42 +375,6 @@ services:
       - "monitoring=true"
 
   # ==========================================================================
-  # PUSH SERVER - REAL-TIME NOTIFICATIONS
-  # ==========================================================================
-  push-server:
-    container_name: ${DOMAIN}_push_server
-    build:
-      context: .
-      dockerfile: docker/push-server/Dockerfile
-
-    environment:
-      - TZ=${TZ}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-      - SECURITY_KEY=${PUSH_SERVER_KEY:-}
-
-    volumes:
-      - ./config/push-server/config.json:/opt/push-server/config.json:ro
-
-    ports:
-      - "${PUSH_PUB_PORT:-9010}:9010"
-      - "${PUSH_SUB_PORT:-8010}:8010"
-
-    networks:
-      - bitrix-network
-
-    restart: unless-stopped
-
-    logging: *default-logging
-
-    depends_on:
-      - redis
-
-    labels:
-      - "com.docker.compose.service=push-server"
-
-  # ==========================================================================
   # MEMCACHED - ДОПОЛНИТЕЛЬНОЕ КЭШИРОВАНИЕ
   # ==========================================================================
   memcached:
@@ -763,7 +727,7 @@ services:
   # --------------------------------------------------------------------------
   rabbitmq-exporter:
     container_name: ${DOMAIN}_rabbitmq_exporter
-    image: kbudde/rabbitmq-exporter:v1.0.0-RC19
+    image: kbudde/rabbitmq-exporter:latest
 
     environment:
       - RABBIT_URL=http://amqp:15672
