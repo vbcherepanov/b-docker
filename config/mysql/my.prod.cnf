@@ -44,8 +44,8 @@ innodb_file_per_table = 1
 # Для сервера с 16GB RAM = 9600MB
 innodb_buffer_pool_size = 9600M
 
-# Количество инстансов (рекомендуется 1 инстанс на 1GB буфера)
-innodb_buffer_pool_instances = 8
+# Количество инстансов (deprecated в MariaDB)
+# innodb_buffer_pool_instances = 8
 
 # Прогрев буфер пула при старте
 innodb_buffer_pool_dump_at_shutdown = 1
@@ -58,8 +58,9 @@ innodb_flush_method = O_DIRECT
 # Для PROD рекомендуется 1, для высокой нагрузки можно 2
 innodb_flush_log_at_trx_commit = 1
 
-# Redo log capacity (2GB для prod)
-innodb_redo_log_capacity = 2147483648
+# Redo log (MariaDB uses innodb_log_file_size instead of MySQL's redo_log_capacity)
+# 1GB per log file, 2 files = 2GB total
+innodb_log_file_size = 1G
 
 # Буфер для лога
 innodb_log_buffer_size = 64M
@@ -76,8 +77,8 @@ innodb_write_io_threads = 8
 # Flush neighbors (0 для SSD, 1 для HDD)
 innodb_flush_neighbors = 0
 
-# File format
-innodb_file_format = Barracuda
+# File format (deprecated in MariaDB)
+# innodb_file_format = Barracuda
 
 # Temporary tablespace
 innodb_temp_data_file_path = ibtmp1:12M:autoextend:max:10G
@@ -125,12 +126,13 @@ transaction-isolation = READ-COMMITTED
 sql_mode = ""
 
 # Binary logging (для репликации и восстановления)
-# Для PROD рекомендуется включить
-log_bin = /var/log/mysql/mysql-bin.log
-binlog_format = ROW
-binlog_expire_logs_seconds = 604800
-max_binlog_size = 512M
-sync_binlog = 1
+# Отключено для серверов с ограниченной RAM
+# log_bin = /var/log/mysql/mysql-bin.log
+# binlog_format = ROW
+# binlog_expire_logs_seconds = 604800
+# max_binlog_size = 512M
+# sync_binlog = 1
+skip-log-bin = 1
 
 # ============================================================================
 # ЛОГИРОВАНИЕ (ДЛЯ PROD - МИНИМАЛЬНОЕ)
@@ -138,16 +140,14 @@ sync_binlog = 1
 # General log (ВЫКЛЮЧЕН в prod)
 general_log = 0
 
-# Error log
-log_error = /var/log/mysql/error.log
-log_error_verbosity = 2
+# Error log (use stderr for Docker)
+# log_error = /var/log/mysql/error.log
+# log_error_verbosity is MySQL-only, not supported in MariaDB
 
-# Slow query log
-slow_query_log = 1
-slow_query_log_file = /var/log/mysql/slow.log
+# Slow query log (отключен для Docker, логи в stdout)
+slow_query_log = 0
+# slow_query_log_file = /var/log/mysql/slow.log
 long_query_time = 3
-log_queries_not_using_indexes = 0
-min_examined_row_limit = 1000
 
 # ============================================================================
 # БЕЗОПАСНОСТЬ

@@ -39,8 +39,8 @@ innodb_file_per_table = 1
 # Буфер пул (для local - 512MB, для сервера с 8GB RAM)
 innodb_buffer_pool_size = 512M
 
-# Количество инстансов буфер пула (рекомендуется 1 на 1GB)
-innodb_buffer_pool_instances = 1
+# Количество инстансов буфер пула (deprecated в MariaDB)
+# innodb_buffer_pool_instances = 1
 
 # Метод flush (O_DIRECT минимизирует двойное буферизование)
 # NOTE: O_DIRECT not supported on macOS/ARM - commenting out for compatibility
@@ -50,8 +50,8 @@ innodb_buffer_pool_instances = 1
 # Для local - производительность важнее надежности
 innodb_flush_log_at_trx_commit = 2
 
-# Redo log capacity (512MB для local)
-innodb_redo_log_capacity = 536870912
+# Redo log (MariaDB uses innodb_log_file_size)
+innodb_log_file_size = 256M
 
 # Буфер для лога
 innodb_log_buffer_size = 16M

@@ -36,7 +36,7 @@ x-volumes:
     target: /home/${UGN}/app/bitrix/cache
 
   # Конфигурационные файлы
-  msmtp: &msmtp ./config/msmtp:/etc/msmtp:ro
+  msmtp: &msmtp ./config/msmtp/msmtprc:/etc/msmtprc
   crontab: &crontab ./config/cron/crontab:/etc/crontabs/${UGN}
 
   # Логи (доступны и для хоста и для Promtail)
@@ -272,8 +272,8 @@ services:
   # ==========================================================================
   mysql:
     container_name: ${DOMAIN}_mysql
-    image: mariadb:10.11
-    # MariaDB is more compatible with older CPUs (no x86-64-v2 requirement)
+    # Use MYSQL_IMAGE env var to choose: mariadb:10.11 (default, low RAM) or mysql:8.0
+    image: ${MYSQL_IMAGE:-mariadb:10.11}
 
     command:
       - --default-authentication-plugin=mysql_native_password

@@ -151,9 +151,23 @@ fi
 echo -e "${GREEN}  ✓ Cron configured${NC}"
 
 # ============================================================================
+# НАСТРОЙКА MSMTP (для отправки почты)
+# ============================================================================
+echo -e "${YELLOW}[5/10] Configuring msmtp...${NC}"
+
+if [ -f "/etc/msmtprc" ]; then
+    # msmtp требует чтобы конфиг с паролем принадлежал запускающему пользователю
+    chown "${UGN}:${UGN}" /etc/msmtprc 2>/dev/null || true
+    chmod 600 /etc/msmtprc 2>/dev/null || true
+    echo -e "${GREEN}  ✓ msmtp configured for user ${UGN}${NC}"
+else
+    echo -e "${YELLOW}  ⚠ msmtprc not found, mail may not work${NC}"
+fi
+
+# ============================================================================
 # ПРОВЕРКА ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ
 # ============================================================================
-echo -e "${YELLOW}[5/9] Checking database connection...${NC}"
+echo -e "${YELLOW}[6/10] Checking database connection...${NC}"
 
 DB_HOST="${DB_HOST:-mysql}"
 DB_PORT="${DB_PORT:-3306}"
@@ -180,7 +194,7 @@ done
 # ============================================================================
 # ПРОВЕРКА ПОДКЛЮЧЕНИЯ К REDIS
 # ============================================================================
-echo -e "${YELLOW}[6/9] Checking Redis connection...${NC}"
+echo -e "${YELLOW}[7/11] Checking Redis connection...${NC}"
 
 REDIS_HOST="${REDIS_HOST:-redis}"
 REDIS_PORT="${REDIS_PORT:-6379}"
@@ -208,7 +222,7 @@ done
 # ============================================================================
 # COMPOSER (только для dev/local окружения)
 # ============================================================================
-echo -e "${YELLOW}[7/9] Checking Composer...${NC}"
+echo -e "${YELLOW}[8/11] Checking Composer...${NC}"
 
 if [ "${ENVIRONMENT}" != "prod" ] && [ "${ENVIRONMENT}" != "production" ]; then
     if [ -f "/home/${UGN}/app/composer.json" ]; then
@@ -223,7 +237,7 @@ echo -e "${GREEN}  ✓ Composer checked${NC}"
 # ============================================================================
 # НАСТРОЙКА /etc/hosts ДЛЯ NGINX
 # ============================================================================
-echo -e "${YELLOW}[8/9] Configuring /etc/hosts for nginx access...${NC}"
+echo -e "${YELLOW}[9/11] Configuring /etc/hosts for nginx access...${NC}"
 
 # Небольшая задержка для инициализации Docker DNS
 sleep 2
@@ -280,7 +294,7 @@ fi
 # ============================================================================
 # АВТОГЕНЕРАЦИЯ session.cookie_secure НА ОСНОВЕ SSL
 # ============================================================================
-echo -e "${YELLOW}[9/9] Configuring session.cookie_secure...${NC}"
+echo -e "${YELLOW}[10/11] Configuring session.cookie_secure...${NC}"
 
 SESSION_SECURE="Off"
 if [ "$SSL" = "1" ] || [ "$SSL" = "2" ]; then
@@ -301,7 +315,7 @@ echo -e "${GREEN}  ✓ Session security configured: session.cookie_secure=${SESS
 # ============================================================================
 # ДОБАВЛЕНИЕ ВНУТРЕННЕГО SSL СЕРТИФИКАТА В ДОВЕРЕННЫЕ
 # ============================================================================
-echo -e "${YELLOW}[10/10] Adding internal SSL certificate to trusted CA...${NC}"
+echo -e "${YELLOW}[11/11] Adding internal SSL certificate to trusted CA...${NC}"
 
 # Ждём nginx и получаем его SSL сертификат
 if [ -n "$NGINX_IP" ]; then
