@@ -37,7 +37,8 @@ x-volumes:
 
   # Конфигурационные файлы
   msmtp: &msmtp ./config/msmtp/msmtprc:/etc/msmtprc
-  crontab: &crontab ./config/cron/crontab:/etc/crontabs/${UGN}
+  # NOTE: dcron in Alpine requires root crontab for reliable execution
+  crontab: &crontab ./config/cron/crontab:/etc/crontabs/root
 
   # Логи (доступны и для хоста и для Promtail)
   logs-nginx: &logs-nginx ./volume/logs/nginx:/var/log/nginx

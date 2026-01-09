@@ -130,25 +130,23 @@ echo -e "${GREEN}  ✓ PHP-FPM configured (pm=${PHP_FPM_PM})${NC}"
 # ============================================================================
 echo -e "${YELLOW}[4/9] Configuring cron...${NC}"
 
-# Проверяем наличие crontab файла
-if [ -f "/etc/crontabs/${UGN}" ]; then
-    # Устанавливаем правильные права
-    chmod 600 "/etc/crontabs/${UGN}"
-    chown "${UGN}:${UGN}" "/etc/crontabs/${UGN}"
+# NOTE: dcron in Alpine requires root crontab for reliable execution
+# Crontab is mounted to /etc/crontabs/root via docker-compose
+if [ -f "/etc/crontabs/root" ]; then
+    # Устанавливаем правильные права для root crontab
+    chmod 600 "/etc/crontabs/root"
+    chown root:root "/etc/crontabs/root"
 
     # Проверяем содержимое
-    if [ -s "/etc/crontabs/${UGN}" ]; then
-        echo -e "${GREEN}  ✓ Crontab configured for user ${UGN}${NC}"
-        echo -e "${BLUE}  Crontab contents:${NC}"
-        cat "/etc/crontabs/${UGN}" | grep -v "^#" | grep -v "^$" | sed 's/^/    /'
+    if [ -s "/etc/crontabs/root" ]; then
+        echo -e "${GREEN}  ✓ Root crontab configured${NC}"
+        CRON_TASKS=$(cat "/etc/crontabs/root" | grep -v "^#" | grep -v "^$" | grep -v "run-parts" | wc -l)
+        echo -e "${BLUE}  Active Bitrix tasks: ${CRON_TASKS}${NC}"
     else
         echo -e "${YELLOW}  ⚠ Crontab file is empty${NC}"
     fi
 else
-    echo -e "${YELLOW}  ⚠ Crontab file not found, creating empty...${NC}"
-    touch "/etc/crontabs/${UGN}"
-    chmod 600 "/etc/crontabs/${UGN}"
-    chown "${UGN}:${UGN}" "/etc/crontabs/${UGN}"
+    echo -e "${YELLOW}  ⚠ Root crontab file not found${NC}"
 fi
 
 echo -e "${GREEN}  ✓ Cron configured${NC}"
