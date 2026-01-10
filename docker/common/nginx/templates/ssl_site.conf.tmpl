@@ -44,7 +44,7 @@ server {
 
     charset utf-8;
     index index.php;
-    root /home/${UGN}/app/${DOMAIN};
+    root /home/${UGN}/app;
     server_tokens off;
 
     access_log /dev/stdout;
@@ -74,6 +74,6 @@ server {
         log_not_found off;
     }
 
-    include /etc/nginx/snippets/resolver.conf;
+    # resolver.conf not needed here - OCSP stapling has its own resolver above
     include /etc/nginx/snippets/bitrix.conf;
 }
