@@ -126,9 +126,58 @@ fi
 echo -e "${GREEN}  ✓ PHP-FPM configured (pm=${PHP_FPM_PM})${NC}"
 
 # ============================================================================
+# ВЕРСИОННЫЕ НАСТРОЙКИ PHP (совместимость 7.4, 8.3, 8.4)
+# ============================================================================
+echo -e "${YELLOW}[4/12] Configuring PHP version-specific settings...${NC}"
+
+# Получаем версию PHP
+PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+echo -e "${BLUE}  PHP Version detected: ${PHP_VERSION}${NC}"
+
+# Создаем версионный конфиг
+VERSION_INI="/usr/local/etc/php/conf.d/00-version-compat.ini"
+
+cat > "${VERSION_INI}" <<EOF
+; =============================================================================
+; PHP VERSION-SPECIFIC SETTINGS
+; Auto-generated for PHP ${PHP_VERSION}
+; =============================================================================
+EOF
+
+# PHP 7.4 и 8.0-8.3: включаем настройки которые deprecated в 8.4
+case "${PHP_VERSION}" in
+    7.4|8.0|8.1|8.2|8.3)
+        cat >> "${VERSION_INI}" <<EOF
+
+; mbstring internal encoding (deprecated in PHP 8.0+ but still works until 8.4)
+mbstring.internal_encoding = UTF-8
+
+; Session ID settings for enhanced security (deprecated in PHP 8.4)
+session.sid_length = 48
+session.sid_bits_per_character = 6
+EOF
+        echo -e "${GREEN}  ✓ Added legacy settings for PHP ${PHP_VERSION}${NC}"
+        ;;
+    8.4|8.5|9.*)
+        cat >> "${VERSION_INI}" <<EOF
+
+; PHP ${PHP_VERSION}: mbstring.internal_encoding, session.sid_length,
+; session.sid_bits_per_character are deprecated/removed
+; Using PHP defaults (UTF-8, secure session IDs)
+EOF
+        echo -e "${GREEN}  ✓ Using modern defaults for PHP ${PHP_VERSION}${NC}"
+        ;;
+    *)
+        echo -e "${YELLOW}  ⚠ Unknown PHP version ${PHP_VERSION}, using safe defaults${NC}"
+        ;;
+esac
+
+echo -e "${GREEN}  ✓ Version-specific settings configured${NC}"
+
+# ============================================================================
 # НАСТРОЙКА CRON
 # ============================================================================
-echo -e "${YELLOW}[4/9] Configuring cron...${NC}"
+echo -e "${YELLOW}[5/12] Configuring cron...${NC}"
 
 # NOTE: dcron in Alpine requires root crontab for reliable execution
 # Crontab is mounted to /etc/crontabs/root via docker-compose
@@ -154,7 +203,7 @@ echo -e "${GREEN}  ✓ Cron configured${NC}"
 # ============================================================================
 # НАСТРОЙКА MSMTP (для отправки почты)
 # ============================================================================
-echo -e "${YELLOW}[5/10] Configuring msmtp...${NC}"
+echo -e "${YELLOW}[6/12] Configuring msmtp...${NC}"
 
 if [ -f "/etc/msmtprc" ]; then
     # msmtp требует чтобы конфиг с паролем принадлежал запускающему пользователю
@@ -168,7 +217,7 @@ fi
 # ============================================================================
 # ПРОВЕРКА ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ
 # ============================================================================
-echo -e "${YELLOW}[6/10] Checking database connection...${NC}"
+echo -e "${YELLOW}[7/12] Checking database connection...${NC}"
 
 DB_HOST="${DB_HOST:-mysql}"
 DB_PORT="${DB_PORT:-3306}"
@@ -195,7 +244,7 @@ done
 # ============================================================================
 # ПРОВЕРКА ПОДКЛЮЧЕНИЯ К REDIS
 # ============================================================================
-echo -e "${YELLOW}[7/11] Checking Redis connection...${NC}"
+echo -e "${YELLOW}[8/12] Checking Redis connection...${NC}"
 
 REDIS_HOST="${REDIS_HOST:-redis}"
 REDIS_PORT="${REDIS_PORT:-6379}"
@@ -223,7 +272,7 @@ done
 # ============================================================================
 # COMPOSER (только для dev/local окружения)
 # ============================================================================
-echo -e "${YELLOW}[8/11] Checking Composer...${NC}"
+echo -e "${YELLOW}[9/12] Checking Composer...${NC}"
 
 if [ "${ENVIRONMENT}" != "prod" ] && [ "${ENVIRONMENT}" != "production" ]; then
     if [ -f "/home/${UGN}/app/composer.json" ]; then
@@ -238,7 +287,7 @@ echo -e "${GREEN}  ✓ Composer checked${NC}"
 # ============================================================================
 # НАСТРОЙКА /etc/hosts ДЛЯ NGINX
 # ============================================================================
-echo -e "${YELLOW}[9/11] Configuring /etc/hosts for nginx access...${NC}"
+echo -e "${YELLOW}[10/12] Configuring /etc/hosts for nginx access...${NC}"
 
 # Небольшая задержка для инициализации Docker DNS
 sleep 2
@@ -295,7 +344,7 @@ fi
 # ============================================================================
 # АВТОГЕНЕРАЦИЯ session.cookie_secure НА ОСНОВЕ SSL
 # ============================================================================
-echo -e "${YELLOW}[10/11] Configuring session.cookie_secure...${NC}"
+echo -e "${YELLOW}[11/12] Configuring session.cookie_secure...${NC}"
 
 SESSION_SECURE="Off"
 if [ "$SSL" = "1" ] || [ "$SSL" = "2" ]; then
@@ -316,7 +365,7 @@ echo -e "${GREEN}  ✓ Session security configured: session.cookie_secure=${SESS
 # ============================================================================
 # ДОБАВЛЕНИЕ ВНУТРЕННЕГО SSL СЕРТИФИКАТА В ДОВЕРЕННЫЕ
 # ============================================================================
-echo -e "${YELLOW}[11/11] Adding internal SSL certificate to trusted CA...${NC}"
+echo -e "${YELLOW}[12/12] Adding internal SSL certificate to trusted CA...${NC}"
 
 # Только если SSL включён
 if [ "$SSL" = "0" ] || [ -z "$SSL" ]; then

@@ -50,7 +50,7 @@ date.timezone = ${TZ}
 
 ; Bitrix специфичные настройки
 mbstring.func_overload = 0
-mbstring.internal_encoding = UTF-8
+; mbstring.internal_encoding - set dynamically in entrypoint based on PHP version
 
 [PHP-FPM]
 ; FPM настройки процессов
