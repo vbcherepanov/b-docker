@@ -14,7 +14,55 @@ NETWORK_NAME ?=${DOMAIN}_network
 
 .PHONY: reload-cron up init down build docker-build docker-up docker-down-clear test init composer-install cli cron-agent tests-run init-system create-unit-test create_dump monitoring-up monitoring-down portainer-up portainer-down backup-db backup-files backup-full set-local set-dev set-prod ssl-generate logs-nginx logs-php status clean-volumes clean-images clean-all disk-usage
 
-# === НОВЫЕ КОМАНДЫ ЕДИНОГО DOCKER-COMPOSE ===
+# ============================================================================
+# ПРОСТЫЕ КОМАНДЫ ДЛЯ ЗАПУСКА ВСЕГО СТЕКА
+# ============================================================================
+# make local  - запуск ВСЕГО для локальной разработки
+# make dev    - запуск ВСЕГО для dev сервера
+# make prod   - запуск ВСЕГО для production
+
+# LOCAL: local + push + monitoring (всё для разработки)
+PROFILES_LOCAL = --profile local --profile push --profile monitoring
+local: build-base
+	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) build
+	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) up -d
+local-down:
+	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) down
+local-restart: local-down local
+local-logs:
+	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) logs -f
+local-ps:
+	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) ps
+
+# DEV: dev + push + monitoring (для dev сервера)
+PROFILES_DEV = --profile dev --profile push --profile monitoring
+dev: build-base
+	$(DOCKER_COMPOSE) $(PROFILES_DEV) build
+	$(DOCKER_COMPOSE) $(PROFILES_DEV) up -d
+dev-down:
+	$(DOCKER_COMPOSE) $(PROFILES_DEV) down
+dev-restart: dev-down dev
+dev-logs:
+	$(DOCKER_COMPOSE) $(PROFILES_DEV) logs -f
+dev-ps:
+	$(DOCKER_COMPOSE) $(PROFILES_DEV) ps
+
+# PROD: prod + push + monitoring + backup (для production)
+PROFILES_PROD = --profile prod --profile push --profile monitoring --profile backup
+prod: build-base
+	$(DOCKER_COMPOSE) $(PROFILES_PROD) build
+	$(DOCKER_COMPOSE) $(PROFILES_PROD) up -d
+prod-down:
+	$(DOCKER_COMPOSE) $(PROFILES_PROD) down
+prod-restart: prod-down prod
+prod-logs:
+	$(DOCKER_COMPOSE) $(PROFILES_PROD) logs -f
+prod-ps:
+	$(DOCKER_COMPOSE) $(PROFILES_PROD) ps
+
+# ============================================================================
+# СТАРЫЕ КОМАНДЫ (для совместимости)
+# ============================================================================
 
 # Локальная разработка (с MySQL, Redis, MailHog)
 up-local: build-base docker-local-build docker-local-up nginx_local_start

@@ -22,8 +22,8 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-    # Block hidden files
-    location ~ /\. {
+    # Block hidden files (except .default used by Bitrix themes)
+    location ~ /\.(?!default|well-known) {
         deny all;
         access_log off;
         log_not_found off;

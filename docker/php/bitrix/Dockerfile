@@ -29,6 +29,8 @@ ARG PHP_FPM_MAX_SPARE_SERVERS=35
 ARG PHP_MEMORY_LIMIT=256M
 ARG PHP_UPLOAD_MAX_FILESIZE=64M
 ARG PHP_POST_MAX_SIZE=64M
+# Push server
+ARG PUSH_SECURITY_KEY
 
 # ============================================================================
 # ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
@@ -49,7 +51,8 @@ ENV ENVIRONMENT=${ENVIRONMENT} \
     PHP_FPM_MAX_SPARE_SERVERS=${PHP_FPM_MAX_SPARE_SERVERS} \
     PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT} \
     PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE} \
-    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE}
+    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE} \
+    PUSH_SECURITY_KEY=${PUSH_SECURITY_KEY}
 
 # Безопасный shell
 SHELL ["/bin/sh", "-eux", "-o", "pipefail", "-c"]
@@ -148,7 +151,8 @@ COPY /config/logrotate/bitrix-logs.conf /etc/logrotate.d/bitrix
 # Entrypoint и вспомогательные скрипты
 COPY /docker/php/bitrix/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 COPY /docker/php/bitrix/healthcheck.sh /usr/local/bin/healthcheck
-RUN chmod +x /usr/local/bin/docker-entrypoint /usr/local/bin/healthcheck
+COPY /docker/common/php/scripts /usr/local/bin/scripts
+RUN chmod +x /usr/local/bin/docker-entrypoint /usr/local/bin/healthcheck /usr/local/bin/scripts/*
 
 # ============================================================================
 # ОЧИСТКА ОТЛАДОЧНЫХ ИНСТРУМЕНТОВ В ПРОДАКШН

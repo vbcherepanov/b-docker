@@ -60,8 +60,8 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "upgrade-insecure-requests" always;
 
-    # Block hidden files
-    location ~ /\. {
+    # Block hidden files (except .default used by Bitrix themes)
+    location ~ /\.(?!default|well-known) {
         deny all;
         access_log off;
         log_not_found off;

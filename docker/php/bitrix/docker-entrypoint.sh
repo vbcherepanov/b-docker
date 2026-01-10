@@ -283,9 +283,26 @@ while [ $COUNT -lt $MAX_TRIES ]; do
 done
 
 # ============================================================================
+# НАСТРОЙКА PUSH SERVER (автоматическая конфигурация из ENV)
+# ============================================================================
+echo -e "${YELLOW}[9/13] Configuring Push Server...${NC}"
+
+if [ -n "${PUSH_SECURITY_KEY}" ]; then
+    export APP_ROOT="/home/${UGN}/app"
+    if [ -f "/home/${UGN}/app/bitrix/.settings.php" ]; then
+        php /usr/local/bin/scripts/configure-push.php
+        echo -e "${GREEN}  ✓ Push server configured${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ Bitrix not installed, skipping push configuration${NC}"
+    fi
+else
+    echo -e "${YELLOW}  ⚠ PUSH_SECURITY_KEY not set, skipping push configuration${NC}"
+fi
+
+# ============================================================================
 # COMPOSER (только для dev/local окружения)
 # ============================================================================
-echo -e "${YELLOW}[9/12] Checking Composer...${NC}"
+echo -e "${YELLOW}[10/13] Checking Composer...${NC}"
 
 if [ "${ENVIRONMENT}" != "prod" ] && [ "${ENVIRONMENT}" != "production" ]; then
     if [ -f "/home/${UGN}/app/composer.json" ]; then
@@ -300,7 +317,7 @@ echo -e "${GREEN}  ✓ Composer checked${NC}"
 # ============================================================================
 # НАСТРОЙКА /etc/hosts ДЛЯ NGINX
 # ============================================================================
-echo -e "${YELLOW}[10/12] Configuring /etc/hosts for nginx access...${NC}"
+echo -e "${YELLOW}[11/13] Configuring /etc/hosts for nginx access...${NC}"
 
 # Небольшая задержка для инициализации Docker DNS
 sleep 2
@@ -357,7 +374,7 @@ fi
 # ============================================================================
 # АВТОГЕНЕРАЦИЯ session.cookie_secure НА ОСНОВЕ SSL
 # ============================================================================
-echo -e "${YELLOW}[11/12] Configuring session.cookie_secure...${NC}"
+echo -e "${YELLOW}[12/13] Configuring session.cookie_secure...${NC}"
 
 SESSION_SECURE="Off"
 if [ "$SSL" = "1" ] || [ "$SSL" = "2" ]; then
@@ -378,7 +395,7 @@ echo -e "${GREEN}  ✓ Session security configured: session.cookie_secure=${SESS
 # ============================================================================
 # ДОБАВЛЕНИЕ ВНУТРЕННЕГО SSL СЕРТИФИКАТА В ДОВЕРЕННЫЕ
 # ============================================================================
-echo -e "${YELLOW}[12/12] Adding internal SSL certificate to trusted CA...${NC}"
+echo -e "${YELLOW}[13/13] Adding internal SSL certificate to trusted CA...${NC}"
 
 # Только если SSL включён
 if [ "$SSL" = "0" ] || [ -z "$SSL" ]; then

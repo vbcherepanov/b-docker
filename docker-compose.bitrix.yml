@@ -90,6 +90,8 @@ x-bitrix-env: &bitrix-env
   RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
   RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER}
   RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
+  # Push Server
+  PUSH_SECURITY_KEY: ${PUSH_SECURITY_KEY:-}
 
 # Logging configuration
 x-logging: &default-logging
