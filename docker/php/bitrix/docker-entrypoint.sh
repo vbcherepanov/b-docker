@@ -318,8 +318,10 @@ echo -e "${GREEN}  ✓ Session security configured: session.cookie_secure=${SESS
 # ============================================================================
 echo -e "${YELLOW}[11/11] Adding internal SSL certificate to trusted CA...${NC}"
 
-# Ждём nginx и получаем его SSL сертификат
-if [ -n "$NGINX_IP" ]; then
+# Только если SSL включён
+if [ "$SSL" = "0" ] || [ -z "$SSL" ]; then
+    echo -e "${YELLOW}  ⚠ SSL disabled (SSL=$SSL), skipping certificate trust setup${NC}"
+elif [ -n "$NGINX_IP" ]; then
     MAX_TRIES=30
     COUNT=0
     CERT_ADDED=false

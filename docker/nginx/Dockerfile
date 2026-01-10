@@ -1,20 +1,24 @@
+# =============================================================================
+# NGINX - Web Server for Bitrix
+# Supports: local, dev, production environments
+# SSL modes: 0 (none), self (custom certs), free (Let's Encrypt)
+# =============================================================================
 FROM nginx:stable-alpine3.17-slim
 
-# --- ARG и ENV переменные ---
-ARG ENVIRONMENT=prod
-ARG SSL=self
-ARG DOMAIN
-ARG EMAIL
-ARG TZ
-ARG UID
-ARG GID
-ARG UGN
-ARG MAIL_CONFIG=1
-ARG RABBIT_CONFIG=1
-ARG DOLLAR
+# --- Build Arguments ---
+ARG ENVIRONMENT=local
+ARG SSL=0
+ARG DOMAIN=localhost
+ARG EMAIL=admin@localhost
+ARG TZ=UTC
+ARG UID=1000
+ARG GID=1000
+ARG UGN=bitrix
+ARG MAIL_CONFIG=0
+ARG RABBIT_CONFIG=0
 
-ENV DOLLAR=${DOLLAR}
-ENV TZ=${TZ:-UTC}
+# --- Environment Variables ---
+ENV TZ=${TZ}
 ENV ENVIRONMENT=${ENVIRONMENT}
 ENV SSL=${SSL}
 ENV DOMAIN=${DOMAIN}
@@ -24,86 +28,83 @@ ENV RABBIT_CONFIG=${RABBIT_CONFIG}
 ENV UGN=${UGN}
 ENV UID=${UID}
 ENV GID=${GID}
+ENV DOLLAR='$'
 
-# --- Установка envsubst ---
-RUN apk add --no-cache gettext bash curl openssl nss tzdata
+# --- Install dependencies ---
+RUN apk add --no-cache \
+    gettext \
+    bash \
+    curl \
+    openssl \
+    nss \
+    tzdata
 
-# --- Настройка таймзоны ---
-RUN ln -snf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime && echo ${TZ:-UTC} > /etc/timezone
+# --- Timezone ---
+RUN ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo ${TZ} > /etc/timezone
 
-# --- Создание пользователя ---
-RUN addgroup -g $GID $UGN || true && \
-    adduser -D -u $UID -G $UGN $UGN || true
+# --- Create user ---
+RUN addgroup -g ${GID} ${UGN} 2>/dev/null || true && \
+    adduser -D -u ${UID} -G ${UGN} ${UGN} 2>/dev/null || true
 
-# Создание директорий с правами
-RUN mkdir -p /home/$UGN/app /home/$UGN/tmp /var/cache/nginx /var/run/nginx /var/template /var/cache/nginx/client_temp && \
-    chown -R $UID:$GID /home/$UGN /var/cache/nginx /var/run/nginx /var/template /var/cache/nginx && \
-    chmod -R 755 /home/$UGN /var/cache/nginx && \
-    chmod -R 700 /var/cache/nginx
-# --- Копирование конфигов и скриптов ---
-COPY --chown=$UID:$GID /docker/common/nginx/templates /var/template
-COPY --chown=$UID:$GID /config/nginx/ssl /etc/letsencrypt/live
-COPY --chown=$UID:$GID /docker/common/nginx/snippets /etc/nginx/snippets
-COPY --chown=$UID:$GID /docker/common/nginx/nginx-unprivileged.conf /etc/nginx/nginx.conf
-COPY --chown=$UID:$GID /docker/common/nginx/script/ /usr/local/bin/script/
+# --- Create directories ---
+RUN mkdir -p \
+    /home/${UGN}/app \
+    /home/${UGN}/tmp \
+    /var/cache/nginx/client_temp \
+    /var/cache/nginx/proxy_temp \
+    /var/cache/nginx/fastcgi_temp \
+    /var/cache/nginx/uwsgi_temp \
+    /var/cache/nginx/scgi_temp \
+    /var/log/nginx \
+    /var/run/nginx \
+    /var/template \
+    /etc/letsencrypt/live && \
+    chown -R ${UID}:${GID} /home/${UGN} /var/cache/nginx /var/log/nginx /var/run/nginx /var/template && \
+    chmod -R 755 /home/${UGN} /var/cache/nginx /var/log/nginx /var/run/nginx
 
-RUN envsubst '${DOMAIN} ${UGN}' < /var/template/default_conf.tmpl > /etc/nginx/conf.d/default.conf
-RUN envsubst < /var/template/site.conf.tmpl > /etc/nginx/conf.d/$DOMAIN.conf
-# Копирование конфигов для Mailhog и RabbitMQ, если включены
-RUN if [ "$MAIL_CONFIG" = "1" ]; then \
-        envsubst < /var/template/mail.conf.tmpl > /etc/nginx/conf.d/mailhog_$DOMAIN.conf; \
+# --- Copy templates and configs ---
+COPY --chown=${UID}:${GID} docker/common/nginx/templates /var/template
+COPY --chown=${UID}:${GID} docker/common/nginx/snippets /etc/nginx/snippets
+COPY --chown=${UID}:${GID} docker/common/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY --chown=${UID}:${GID} docker/common/nginx/script/ /usr/local/bin/script/
+COPY --chown=${UID}:${GID} docker/nginx/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+# --- Copy self-signed SSL certs if exists ---
+COPY --chown=${UID}:${GID} config/nginx/ssl /etc/letsencrypt/live
+
+# --- Generate nginx configs based on environment ---
+RUN envsubst '${DOMAIN} ${UGN} ${DOLLAR}' < /var/template/default_conf.tmpl > /etc/nginx/conf.d/default.conf && \
+    envsubst '${DOMAIN} ${UGN} ${DOLLAR}' < /var/template/site.conf.tmpl > /etc/nginx/conf.d/${DOMAIN}.conf
+
+# --- Generate optional service configs ---
+RUN if [ "${MAIL_CONFIG}" = "1" ]; then \
+        envsubst '${DOMAIN} ${DOLLAR}' < /var/template/mail.conf.tmpl > /etc/nginx/conf.d/mail.${DOMAIN}.conf; \
     fi && \
-    if [ "$RABBIT_CONFIG" = "1" ]; then \
-        envsubst < /var/template/rabbit.conf.tmpl > /etc/nginx/conf.d/rabbitmq_$DOMAIN.conf; \
+    if [ "${RABBIT_CONFIG}" = "1" ]; then \
+        envsubst '${DOMAIN} ${DOLLAR}' < /var/template/rabbit.conf.tmpl > /etc/nginx/conf.d/rabbit.${DOMAIN}.conf; \
     fi
 
-# --- Копирование entrypoint ---
-COPY --chown=$UID:$GID /docker/nginx/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+# --- Install certbot for Let's Encrypt (prod/dev with SSL=free only) ---
+RUN if [ "${SSL}" = "free" ]; then \
+        apk add --no-cache certbot certbot-nginx && \
+        mkdir -p /var/run/crond && \
+        touch /var/run/crond/crond.pid && \
+        chmod 755 /var/run/crond; \
+    fi
 
-# --- Разрешения на скрипты ---
+# --- Make scripts executable ---
 RUN chmod +x /usr/local/bin/script/* /usr/local/bin/docker-entrypoint.sh
 
-# --- Установка нужных пакетов ---
-RUN \
-    if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then \
-        if [ "$SSL" = "free" ]; then \
-            apk add --no-cache certbot certbot-nginx cronie && \
-            mkdir -p /var/run/crond && \
-            touch /var/run/crond/crond.pid && \
-            chmod 755 /var/run/crond; \
-        fi; \
-    fi
+# --- Ports ---
+EXPOSE 80 443
 
-# --- Создание директорий для nginx под непривилегированным пользователем ---
-RUN mkdir -p /var/cache/nginx/client_temp \
-             /var/cache/nginx/proxy_temp \
-             /var/cache/nginx/fastcgi_temp \
-             /var/cache/nginx/uwsgi_temp \
-             /var/cache/nginx/scgi_temp \
-             /var/log/nginx \
-             /var/run/nginx && \
-    chown -R $UID:$GID /var/cache/nginx /var/log/nginx /var/run/nginx && \
-    chmod -R 755 /var/cache/nginx /var/log/nginx /var/run/nginx
-
-# --- Обновление конфига nginx для работы под непривилегированным пользователем ---
-RUN sed -i '/^user/d' /etc/nginx/nginx.conf && \
-    sed -i 's/listen 80;/listen 8080;/' /etc/nginx/conf.d/default.conf && \
-    sed -i 's/listen 443;/listen 8443;/' /etc/nginx/conf.d/default.conf && \
-    sed -i 's/\/var\/run\/nginx.pid/\/var\/run\/nginx\/nginx.pid/' /etc/nginx/nginx.conf
-
-# --- Открытые порты (изменены для непривилегированного пользователя) ---
-EXPOSE 8080 8443
-
-# --- Рабочая директория и пользователь ---
-RUN chown -R $UID:$GID /home/$UGN
-WORKDIR /home/$UGN/app
-# FIXME: Running as root for now - nginx master needs root to bind to ports and write PID
-# USER $UGN
+# --- Working directory ---
+WORKDIR /home/${UGN}/app
 
 # --- Healthcheck ---
-HEALTHCHECK --interval=300s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:80/health || exit 1
 
-# --- Entrypoint и старт nginx ---
+# --- Entrypoint ---
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
