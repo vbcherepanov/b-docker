@@ -223,6 +223,12 @@ services:
         EMAIL: ${EMAIL}
         MAIL_CONFIG: ${MAIL_CONFIG:-0}
         RABBIT_CONFIG: ${RABBIT_CONFIG:-0}
+        GRAFANA_CONFIG: ${GRAFANA_CONFIG:-0}
+        PROMETHEUS_CONFIG: ${PROMETHEUS_CONFIG:-0}
+        MAIL_SUBDOMAIN: ${MAIL_SUBDOMAIN:-mail}
+        RABBIT_SUBDOMAIN: ${RABBIT_SUBDOMAIN:-rabbit}
+        GRAFANA_SUBDOMAIN: ${GRAFANA_SUBDOMAIN:-grafana}
+        PROMETHEUS_SUBDOMAIN: ${PROMETHEUS_SUBDOMAIN:-prometheus}
         DOLLAR: $$
         UID: ${UID}
         GID: ${GID}
@@ -236,6 +242,9 @@ services:
       # FastCGI backend
       PHP_FPM_HOST: bitrix
       PHP_FPM_PORT: 9000
+      # Monitoring basic auth (for grafana, prometheus, rabbit subdomains)
+      MONITORING_USER: ${MONITORING_USER:-admin}
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD:-}
 
     volumes:
       - *app-code
@@ -519,7 +528,10 @@ services:
 
     ports:
       - "${RABBIT_PORT:-5672}:5672"
-      - "${RABBIT_UI_PORT:-15672}:15672"
+
+    # UI access via subdomain rabbit.${DOMAIN} through nginx proxy
+    expose:
+      - "15672"
 
     networks:
       - bitrix-network
@@ -585,15 +597,15 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel
-      - GF_SERVER_ROOT_URL=http://${DOMAIN}:${GRAFANA_PORT:-3000}
 
     volumes:
       - grafana-data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning
       - ./config/grafana/dashboards:/var/lib/grafana/dashboards
 
-    ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+    # Access via subdomain grafana.${DOMAIN} through nginx proxy
+    expose:
+      - "3000"
 
     networks:
       - bitrix-network
@@ -625,8 +637,9 @@ services:
       - prometheus-data:/prometheus
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-    ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+    # Access via subdomain prometheus.${DOMAIN} through nginx proxy
+    expose:
+      - "9090"
 
     networks:
       - bitrix-network
@@ -763,7 +776,7 @@ services:
     image: hipages/php-fpm_exporter:2
 
     environment:
-      - PHP_FPM_SCRAPE_URI=tcp://nginx:8080/status
+      - PHP_FPM_SCRAPE_URI=tcp://bitrix:9000/status
       - PHP_FPM_FIX_PROCESS_COUNT=true
 
     networks:

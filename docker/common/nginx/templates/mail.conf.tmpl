@@ -1,5 +1,5 @@
 server {
-    server_name mail.${DOMAIN};
+    server_name ${MAIL_SUBDOMAIN}.${DOMAIN};
     listen 80;
     access_log /dev/stdout;
     error_log  /dev/stderr;

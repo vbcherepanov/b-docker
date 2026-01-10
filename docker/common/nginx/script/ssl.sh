@@ -39,13 +39,14 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
 
         # Process mail subdomain if enabled
         if [ "$MAIL_CONFIG" = "1" ]; then
-            DOMAIN_STRING="mail.$DOMAIN"
+            SUBDOMAIN="${MAIL_SUBDOMAIN:-mail}"
+            DOMAIN_STRING="$SUBDOMAIN.$DOMAIN"
             echo "[ssl] Processing subdomain: $DOMAIN_STRING"
             cert_paths=$(get_cert_paths "$DOMAIN_STRING" "$EMAIL")
             if [ $? -eq 0 ]; then
                 CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
                 KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
-                export CERT_PATH KEY_PATH
+                export CERT_PATH KEY_PATH MAIL_SUBDOMAIN="$SUBDOMAIN"
                 envsubst < "$TEMPLATE_DIR/ssl_mail.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN_STRING.conf"
                 CERT_GENERATED=1
                 echo "[ssl] Created nginx config: ssl_$DOMAIN_STRING.conf"
@@ -55,14 +56,49 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
 
         # Process rabbit subdomain if enabled
         if [ "$RABBIT_CONFIG" = "1" ]; then
-            DOMAIN_STRING="rabbit.$DOMAIN"
+            SUBDOMAIN="${RABBIT_SUBDOMAIN:-rabbit}"
+            DOMAIN_STRING="$SUBDOMAIN.$DOMAIN"
             echo "[ssl] Processing subdomain: $DOMAIN_STRING"
             cert_paths=$(get_cert_paths "$DOMAIN_STRING" "$EMAIL")
             if [ $? -eq 0 ]; then
                 CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
                 KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
-                export CERT_PATH KEY_PATH
+                export CERT_PATH KEY_PATH RABBIT_SUBDOMAIN="$SUBDOMAIN"
                 envsubst < "$TEMPLATE_DIR/ssl_rabbit.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN_STRING.conf"
+                CERT_GENERATED=1
+                echo "[ssl] Created nginx config: ssl_$DOMAIN_STRING.conf"
+            fi
+            sleep 2
+        fi
+
+        # Process grafana subdomain if enabled
+        if [ "$GRAFANA_CONFIG" = "1" ]; then
+            SUBDOMAIN="${GRAFANA_SUBDOMAIN:-grafana}"
+            DOMAIN_STRING="$SUBDOMAIN.$DOMAIN"
+            echo "[ssl] Processing subdomain: $DOMAIN_STRING"
+            cert_paths=$(get_cert_paths "$DOMAIN_STRING" "$EMAIL")
+            if [ $? -eq 0 ]; then
+                CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
+                KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
+                export CERT_PATH KEY_PATH GRAFANA_SUBDOMAIN="$SUBDOMAIN"
+                envsubst < "$TEMPLATE_DIR/ssl_grafana.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN_STRING.conf"
+                CERT_GENERATED=1
+                echo "[ssl] Created nginx config: ssl_$DOMAIN_STRING.conf"
+            fi
+            sleep 2
+        fi
+
+        # Process prometheus subdomain if enabled
+        if [ "$PROMETHEUS_CONFIG" = "1" ]; then
+            SUBDOMAIN="${PROMETHEUS_SUBDOMAIN:-prometheus}"
+            DOMAIN_STRING="$SUBDOMAIN.$DOMAIN"
+            echo "[ssl] Processing subdomain: $DOMAIN_STRING"
+            cert_paths=$(get_cert_paths "$DOMAIN_STRING" "$EMAIL")
+            if [ $? -eq 0 ]; then
+                CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
+                KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
+                export CERT_PATH KEY_PATH PROMETHEUS_SUBDOMAIN="$SUBDOMAIN"
+                envsubst < "$TEMPLATE_DIR/ssl_prometheus.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN_STRING.conf"
                 CERT_GENERATED=1
                 echo "[ssl] Created nginx config: ssl_$DOMAIN_STRING.conf"
             fi

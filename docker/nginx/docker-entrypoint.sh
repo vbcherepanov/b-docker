@@ -13,6 +13,19 @@ echo "Domain: ${DOMAIN:-localhost}"
 echo "SSL: ${SSL:-0}"
 echo "========================================"
 
+# Generate htpasswd for monitoring subdomains (grafana, prometheus, rabbit)
+if [ -n "${MONITORING_USER}" ] && [ -n "${MONITORING_PASSWORD}" ]; then
+    echo "Generating htpasswd for monitoring access..."
+    HTPASSWD_FILE="/etc/nginx/conf.d/.htpasswd"
+    # Generate password hash using openssl (htpasswd not available in alpine nginx)
+    HASH=$(openssl passwd -apr1 "${MONITORING_PASSWORD}")
+    echo "${MONITORING_USER}:${HASH}" > "${HTPASSWD_FILE}"
+    chmod 644 "${HTPASSWD_FILE}"
+    echo "htpasswd file created: ${HTPASSWD_FILE}"
+else
+    echo "Warning: MONITORING_USER or MONITORING_PASSWORD not set, htpasswd not created"
+fi
+
 # Run SSL setup script
 if [ -f /usr/local/bin/script/ssl.sh ]; then
     echo "Running SSL setup..."

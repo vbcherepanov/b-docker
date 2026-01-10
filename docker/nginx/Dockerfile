@@ -16,6 +16,12 @@ ARG GID=1000
 ARG UGN=bitrix
 ARG MAIL_CONFIG=0
 ARG RABBIT_CONFIG=0
+ARG GRAFANA_CONFIG=0
+ARG PROMETHEUS_CONFIG=0
+ARG MAIL_SUBDOMAIN=mail
+ARG RABBIT_SUBDOMAIN=rabbit
+ARG GRAFANA_SUBDOMAIN=grafana
+ARG PROMETHEUS_SUBDOMAIN=prometheus
 
 # --- Environment Variables ---
 ENV TZ=${TZ}
@@ -25,6 +31,12 @@ ENV DOMAIN=${DOMAIN}
 ENV EMAIL=${EMAIL}
 ENV MAIL_CONFIG=${MAIL_CONFIG}
 ENV RABBIT_CONFIG=${RABBIT_CONFIG}
+ENV GRAFANA_CONFIG=${GRAFANA_CONFIG}
+ENV PROMETHEUS_CONFIG=${PROMETHEUS_CONFIG}
+ENV MAIL_SUBDOMAIN=${MAIL_SUBDOMAIN}
+ENV RABBIT_SUBDOMAIN=${RABBIT_SUBDOMAIN}
+ENV GRAFANA_SUBDOMAIN=${GRAFANA_SUBDOMAIN}
+ENV PROMETHEUS_SUBDOMAIN=${PROMETHEUS_SUBDOMAIN}
 ENV UGN=${UGN}
 ENV UID=${UID}
 ENV GID=${GID}
@@ -78,10 +90,16 @@ RUN envsubst '${DOMAIN} ${UGN} ${DOLLAR}' < /var/template/default_conf.tmpl > /e
 
 # --- Generate optional service configs ---
 RUN if [ "${MAIL_CONFIG}" = "1" ]; then \
-        envsubst '${DOMAIN} ${DOLLAR}' < /var/template/mail.conf.tmpl > /etc/nginx/conf.d/mail.${DOMAIN}.conf; \
+        envsubst '${DOMAIN} ${MAIL_SUBDOMAIN} ${DOLLAR}' < /var/template/mail.conf.tmpl > /etc/nginx/conf.d/${MAIL_SUBDOMAIN}.${DOMAIN}.conf; \
     fi && \
     if [ "${RABBIT_CONFIG}" = "1" ]; then \
-        envsubst '${DOMAIN} ${DOLLAR}' < /var/template/rabbit.conf.tmpl > /etc/nginx/conf.d/rabbit.${DOMAIN}.conf; \
+        envsubst '${DOMAIN} ${RABBIT_SUBDOMAIN} ${DOLLAR}' < /var/template/rabbit.conf.tmpl > /etc/nginx/conf.d/${RABBIT_SUBDOMAIN}.${DOMAIN}.conf; \
+    fi && \
+    if [ "${GRAFANA_CONFIG}" = "1" ]; then \
+        envsubst '${DOMAIN} ${GRAFANA_SUBDOMAIN} ${DOLLAR}' < /var/template/grafana.conf.tmpl > /etc/nginx/conf.d/${GRAFANA_SUBDOMAIN}.${DOMAIN}.conf; \
+    fi && \
+    if [ "${PROMETHEUS_CONFIG}" = "1" ]; then \
+        envsubst '${DOMAIN} ${PROMETHEUS_SUBDOMAIN} ${DOLLAR}' < /var/template/prometheus.conf.tmpl > /etc/nginx/conf.d/${PROMETHEUS_SUBDOMAIN}.${DOMAIN}.conf; \
     fi
 
 # --- Install certbot for Let's Encrypt (prod/dev with SSL=free only) ---
