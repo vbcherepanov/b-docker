@@ -144,26 +144,39 @@ cat > "${VERSION_INI}" <<EOF
 ; =============================================================================
 EOF
 
-# PHP 7.4 и 8.0-8.3: включаем настройки которые deprecated в 8.4
+# Версионные настройки PHP
 case "${PHP_VERSION}" in
-    7.4|8.0|8.1|8.2|8.3)
+    7.4)
+        # PHP 7.4: все legacy настройки
         cat >> "${VERSION_INI}" <<EOF
 
-; mbstring internal encoding (deprecated in PHP 8.0+ but still works until 8.4)
+; mbstring internal encoding (required for PHP 7.4)
 mbstring.internal_encoding = UTF-8
 
+; Session ID settings for enhanced security
+session.sid_length = 48
+session.sid_bits_per_character = 6
+EOF
+        echo -e "${GREEN}  ✓ Added PHP 7.4 settings${NC}"
+        ;;
+    8.0|8.1|8.2|8.3)
+        # PHP 8.0-8.3: mbstring deprecated, session.sid settings work
+        cat >> "${VERSION_INI}" <<EOF
+
+; mbstring.internal_encoding is deprecated in PHP 8.0+, UTF-8 is default
 ; Session ID settings for enhanced security (deprecated in PHP 8.4)
 session.sid_length = 48
 session.sid_bits_per_character = 6
 EOF
-        echo -e "${GREEN}  ✓ Added legacy settings for PHP ${PHP_VERSION}${NC}"
+        echo -e "${GREEN}  ✓ Added PHP ${PHP_VERSION} settings${NC}"
         ;;
     8.4|8.5|9.*)
+        # PHP 8.4+: все эти настройки deprecated/removed
         cat >> "${VERSION_INI}" <<EOF
 
-; PHP ${PHP_VERSION}: mbstring.internal_encoding, session.sid_length,
-; session.sid_bits_per_character are deprecated/removed
-; Using PHP defaults (UTF-8, secure session IDs)
+; PHP ${PHP_VERSION}: using modern defaults
+; - mbstring uses UTF-8 by default
+; - session IDs are generated securely by default
 EOF
         echo -e "${GREEN}  ✓ Using modern defaults for PHP ${PHP_VERSION}${NC}"
         ;;

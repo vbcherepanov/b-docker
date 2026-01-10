@@ -644,6 +644,9 @@ services:
     container_name: ${DOMAIN}_loki
     image: grafana/loki:latest
 
+    # Run as root to fix volume permissions
+    user: root
+
     command: -config.file=/etc/loki/local-config.yaml
 
     volumes:
@@ -819,10 +822,13 @@ services:
 
     logging: *default-logging
 
+    # Only run when RabbitMQ is actually running
     profiles:
-      - monitoring
       - rabbitmq
       - full
+
+    depends_on:
+      - amqp
 
     labels:
       - "com.docker.compose.service=rabbitmq-exporter"
