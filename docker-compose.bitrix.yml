@@ -52,6 +52,7 @@ x-volumes:
   # Бэкапы и SSL
   backup-data: &backup-data ./backups:/backups
   ssl-certs: &ssl-certs ./ssl:/etc/ssl/certs
+  letsencrypt-certs: &letsencrypt-certs /etc/letsencrypt:/etc/letsencrypt
 
   # Docker логи для Promtail
   docker-logs: &docker-logs /var/lib/docker/containers:/var/lib/docker/containers:ro
@@ -239,6 +240,7 @@ services:
       - *logs-nginx
       - *logs-letsencrypt
       - *ssl-certs
+      - *letsencrypt-certs
       - ./config/nginx/conf:/etc/nginx/conf.d
       - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
 

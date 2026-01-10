@@ -55,55 +55,52 @@ cert_exists() {
     fi
 }
 
-# Get certificate expiry date in epoch seconds
-# Usage: get_cert_expiry_epoch "example.com"
-# Returns: epoch seconds or empty on error
-get_cert_expiry_epoch() {
+# Check if certificate will expire within given seconds
+# Usage: cert_expires_within "example.com" 432000
+# Returns: 0 if will expire, 1 if still valid
+cert_expires_within() {
+    local domain="$1"
+    local seconds="${2:-432000}"  # Default 5 days
+    local cert_file="$SSL_PATH/$domain/$SSL_KEY"
+
+    if [ ! -f "$cert_file" ]; then
+        return 0  # No cert = needs renewal
+    fi
+
+    # openssl -checkend returns 0 if cert expires within <seconds>, 1 if still valid
+    if openssl x509 -checkend "$seconds" -noout -in "$cert_file" 2>/dev/null; then
+        return 1  # Still valid
+    else
+        return 0  # Will expire
+    fi
+}
+
+# Get approximate days left (for logging purposes)
+# Uses checkend to estimate days remaining
+# Usage: get_cert_days_left "example.com"
+# Returns: approximate number of days
+get_cert_days_left() {
     local domain="$1"
     local cert_file="$SSL_PATH/$domain/$SSL_KEY"
 
     if [ ! -f "$cert_file" ]; then
-        echo ""
+        echo "0"
         return 1
     fi
 
-    # Get expiry date from certificate
-    local expiry_date
-    expiry_date=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
+    # Check at various intervals to estimate days left
+    local days=0
+    for d in 1 5 10 30 60 90; do
+        local seconds=$((d * 86400))
+        # Redirect both stdout and stderr to /dev/null
+        if openssl x509 -checkend "$seconds" -noout -in "$cert_file" >/dev/null 2>&1; then
+            days=$d
+        else
+            break
+        fi
+    done
 
-    if [ -z "$expiry_date" ]; then
-        echo ""
-        return 1
-    fi
-
-    # Convert to epoch (works on Alpine/BusyBox)
-    local expiry_epoch
-    expiry_epoch=$(date -d "$expiry_date" +%s 2>/dev/null)
-
-    echo "$expiry_epoch"
-}
-
-# Get days left until certificate expires
-# Usage: get_cert_days_left "example.com"
-# Returns: number of days (can be negative if expired)
-get_cert_days_left() {
-    local domain="$1"
-    local expiry_epoch
-
-    expiry_epoch=$(get_cert_expiry_epoch "$domain")
-
-    if [ -z "$expiry_epoch" ]; then
-        echo "-1"
-        return 1
-    fi
-
-    local now_epoch
-    now_epoch=$(date +%s)
-
-    local seconds_left=$((expiry_epoch - now_epoch))
-    local days_left=$((seconds_left / 86400))
-
-    echo "$days_left"
+    echo "$days"
 }
 
 # Check if certificate needs renewal (≤5 days left or doesn't exist)
@@ -111,21 +108,21 @@ get_cert_days_left() {
 # Returns: 0 if needs renewal, 1 if OK
 needs_renewal() {
     local domain="$1"
+    local threshold_seconds=$((RENEWAL_THRESHOLD_DAYS * 86400))
 
     if ! cert_exists "$domain"; then
         echo "[ssl] Certificate for $domain does not exist"
         return 0
     fi
 
-    local days_left
-    days_left=$(get_cert_days_left "$domain")
-
-    if [ "$days_left" -le "$RENEWAL_THRESHOLD_DAYS" ]; then
-        echo "[ssl] Certificate for $domain expires in $days_left days (threshold: $RENEWAL_THRESHOLD_DAYS)"
+    if cert_expires_within "$domain" "$threshold_seconds"; then
+        echo "[ssl] Certificate for $domain expires within $RENEWAL_THRESHOLD_DAYS days"
         return 0
     fi
 
-    echo "[ssl] Certificate for $domain is valid for $days_left more days"
+    local days_approx
+    days_approx=$(get_cert_days_left "$domain")
+    echo "[ssl] Certificate for $domain is valid for ~$days_approx+ days"
     return 1
 }
 
@@ -136,20 +133,20 @@ request_cert() {
     local domain="$1"
     local email="$2"
 
-    echo "[ssl] Requesting certificate for $domain..."
+    echo "[ssl] Requesting certificate for $domain..." >&2
 
     local output
     output=$(certbot certonly --nginx --non-interactive --agree-tos \
         --email "$email" -d "$domain" 2>&1)
     local result=$?
 
-    echo "$output"
+    echo "$output" >&2
 
     if [ $result -eq 0 ] && echo "$output" | grep -q "Successfully received certificate\|Certificate not yet due for renewal"; then
-        echo "[ssl] Certificate for $domain obtained successfully"
+        echo "[ssl] Certificate for $domain obtained successfully" >&2
         return 0
     else
-        echo "[ssl] ERROR: Failed to obtain certificate for $domain"
+        echo "[ssl] ERROR: Failed to obtain certificate for $domain" >&2
         return 1
     fi
 }
@@ -160,19 +157,19 @@ request_cert() {
 renew_cert() {
     local domain="$1"
 
-    echo "[ssl] Renewing certificate for $domain..."
+    echo "[ssl] Renewing certificate for $domain..." >&2
 
     local output
     output=$(certbot renew --cert-name "$domain" --nginx --non-interactive 2>&1)
     local result=$?
 
-    echo "$output"
+    echo "$output" >&2
 
     if [ $result -eq 0 ]; then
-        echo "[ssl] Certificate for $domain renewed successfully"
+        echo "[ssl] Certificate for $domain renewed successfully" >&2
         return 0
     else
-        echo "[ssl] ERROR: Failed to renew certificate for $domain"
+        echo "[ssl] ERROR: Failed to renew certificate for $domain" >&2
         return 1
     fi
 }
@@ -180,40 +177,47 @@ renew_cert() {
 # Smart function: create or renew certificate as needed
 # Usage: ensure_cert "example.com" "admin@example.com"
 # Returns: 0 on success (or no action needed), 1 on failure
+# Note: All logging goes to stderr so stdout can be used for return values
 ensure_cert() {
     local domain="$1"
     local email="$2"
+    local threshold_seconds=$((RENEWAL_THRESHOLD_DAYS * 86400))
 
-    echo "[ssl] ========================================"
-    echo "[ssl] Checking certificate for $domain"
-    echo "[ssl] ========================================"
+    echo "[ssl] ========================================" >&2
+    echo "[ssl] Checking certificate for $domain" >&2
+    echo "[ssl] ========================================" >&2
 
     if ! cert_exists "$domain"; then
-        echo "[ssl] Certificate does not exist, requesting new one..."
+        echo "[ssl] Certificate does not exist, requesting new one..." >&2
         request_cert "$domain" "$email"
         return $?
     fi
 
-    local days_left
-    days_left=$(get_cert_days_left "$domain")
-
-    if [ "$days_left" -le 0 ]; then
-        echo "[ssl] Certificate EXPIRED! Requesting new one..."
+    # Check if expired (0 seconds threshold)
+    if cert_expires_within "$domain" 0; then
+        echo "[ssl] Certificate EXPIRED! Requesting new one..." >&2
         request_cert "$domain" "$email"
         return $?
-    elif [ "$days_left" -le "$RENEWAL_THRESHOLD_DAYS" ]; then
-        echo "[ssl] Certificate expires in $days_left days, renewing..."
+    fi
+
+    # Check if needs renewal (within threshold)
+    if cert_expires_within "$domain" "$threshold_seconds"; then
+        local days_approx
+        days_approx=$(get_cert_days_left "$domain")
+        echo "[ssl] Certificate expires within $RENEWAL_THRESHOLD_DAYS days (~$days_approx days left), renewing..." >&2
         renew_cert "$domain"
         return $?
-    else
-        echo "[ssl] Certificate is valid for $days_left days, no action needed"
-        return 0
     fi
+
+    local days_approx
+    days_approx=$(get_cert_days_left "$domain")
+    echo "[ssl] Certificate is valid for ~$days_approx+ days, no action needed" >&2
+    return 0
 }
 
 # Get certificate paths for nginx config
 # Usage: get_cert_paths "example.com" "admin@example.com"
-# Returns: "cert_path key_path" on success
+# Returns: "cert_path key_path" on stdout, logs to stderr
 get_cert_paths() {
     local domain="$1"
     local email="$2"
@@ -227,10 +231,10 @@ get_cert_paths() {
     local key_path="$SSL_PATH/$domain/$SSL_PRIV_KEY"
 
     if [ -f "$cert_path" ] && [ -f "$key_path" ]; then
-        echo "$cert_path $key_path"
+        echo "$cert_path $key_path"  # Only this goes to stdout
         return 0
     else
-        echo "[ssl] ERROR: Certificate files not found after ensure_cert"
+        echo "[ssl] ERROR: Certificate files not found after ensure_cert" >&2
         return 1
     fi
 }
