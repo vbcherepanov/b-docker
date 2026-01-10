@@ -1,54 +1,131 @@
 #!/bin/sh
+# =============================================================================
+# SSL Certificate Management Script
+# Called at nginx container startup
+# =============================================================================
 
 . /usr/local/bin/script/func/main.sh
 
+echo "[ssl] ========================================"
+echo "[ssl] SSL Setup Starting"
+echo "[ssl] Environment: $ENVIRONMENT"
+echo "[ssl] SSL Mode: $SSL"
+echo "[ssl] Domain: $DOMAIN"
+echo "[ssl] ========================================"
+
+# Only process SSL in prod/dev environments
 if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
-    if [ "$SSL" = "2" ]; then
+
+    # =========================================================================
+    # SSL=free - Let's Encrypt (automatic certificates)
+    # =========================================================================
+    if [ "$SSL" = "free" ]; then
+        echo "[ssl] Mode: Let's Encrypt (free certificates)"
         CERT_GENERATED=0
-        echo "start generate SSL cert"
-        echo "Create SSL for $DOMAIN"
+
+        # Process main domain
+        echo "[ssl] Processing main domain: $DOMAIN"
         cert_paths=$(get_cert_paths "$DOMAIN" "$EMAIL")
         if [ $? -eq 0 ]; then
-            CERT_PATH=$(echo "$cert_paths" | awk '{print $1}')
-            KEY_PATH=$(echo "$cert_paths" | awk '{print $2}')
+            CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
+            KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
+            export CERT_PATH KEY_PATH
             envsubst < "$TEMPLATE_DIR/ssl_site.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN.conf"
             CERT_GENERATED=1
+            echo "[ssl] Created nginx config: ssl_$DOMAIN.conf"
         fi
-        sleep 3
+
+        sleep 2
+
+        # Process mail subdomain if enabled
         if [ "$MAIL_CONFIG" = "1" ]; then
             DOMAIN_STRING="mail.$DOMAIN"
-            echo "Create SSL for $DOMAIN_STRING"
+            echo "[ssl] Processing subdomain: $DOMAIN_STRING"
             cert_paths=$(get_cert_paths "$DOMAIN_STRING" "$EMAIL")
             if [ $? -eq 0 ]; then
-                CERT_PATH=$(echo "$cert_paths" | awk '{print $1}')
-                KEY_PATH=$(echo "$cert_paths" | awk '{print $2}')
+                CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
+                KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
+                export CERT_PATH KEY_PATH
                 envsubst < "$TEMPLATE_DIR/ssl_mail.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN_STRING.conf"
                 CERT_GENERATED=1
+                echo "[ssl] Created nginx config: ssl_$DOMAIN_STRING.conf"
             fi
+            sleep 2
         fi
-        sleep 3
+
+        # Process rabbit subdomain if enabled
         if [ "$RABBIT_CONFIG" = "1" ]; then
             DOMAIN_STRING="rabbit.$DOMAIN"
-            echo "Create SSL for $DOMAIN_STRING"
+            echo "[ssl] Processing subdomain: $DOMAIN_STRING"
             cert_paths=$(get_cert_paths "$DOMAIN_STRING" "$EMAIL")
             if [ $? -eq 0 ]; then
-                CERT_PATH=$(echo "$cert_paths" | awk '{print $1}')
-                KEY_PATH=$(echo "$cert_paths" | awk '{print $2}')
+                CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
+                KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
+                export CERT_PATH KEY_PATH
                 envsubst < "$TEMPLATE_DIR/ssl_rabbit.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN_STRING.conf"
                 CERT_GENERATED=1
+                echo "[ssl] Created nginx config: ssl_$DOMAIN_STRING.conf"
             fi
+            sleep 2
         fi
-        sleep 3
+
+        # Setup cron for automatic renewal if any certificate was created
         if [ "$CERT_GENERATED" -eq 1 ]; then
-            echo "Setting up cron job for certbot renewal..."
-            echo "0 0 * * * certbot renew --quiet --post-hook \"nginx -s reload\"" >> /etc/crontabs/nginx
-            echo "Starting crond..."
+            echo "[ssl] Setting up daily certificate check (cron)..."
+
+            # Create renewal script
+            cat > /usr/local/bin/ssl-renew.sh << 'EOFSCRIPT'
+#!/bin/sh
+. /usr/local/bin/script/func/main.sh
+check_and_renew_all >> /var/log/letsencrypt/renewal.log 2>&1
+EOFSCRIPT
+            chmod +x /usr/local/bin/ssl-renew.sh
+
+            # Add cron job - check daily at 3:00 AM
+            echo "0 3 * * * /usr/local/bin/ssl-renew.sh" >> /etc/crontabs/root
+
+            # Ensure log directory exists
+            mkdir -p /var/log/letsencrypt
+
+            echo "[ssl] Starting crond..."
             crond
+
+            echo "[ssl] Reloading nginx with new SSL configs..."
             reload_nginx
         fi
-    elif [ "$SSL" = "1" ]; then
-        echo "Loading self-signed certificates from volume..."
+
+    # =========================================================================
+    # SSL=self - Self-signed or custom certificates from volume
+    # =========================================================================
+    elif [ "$SSL" = "self" ]; then
+        echo "[ssl] Mode: Self-signed/custom certificates"
+        echo "[ssl] Looking for certificates in: $SSL_PATH/$DOMAIN/"
+
+        if [ -f "$SSL_PATH/$DOMAIN/$SSL_KEY" ] && [ -f "$SSL_PATH/$DOMAIN/$SSL_PRIV_KEY" ]; then
+            CERT_PATH="$SSL_PATH/$DOMAIN/$SSL_KEY"
+            KEY_PATH="$SSL_PATH/$DOMAIN/$SSL_PRIV_KEY"
+            export CERT_PATH KEY_PATH
+            envsubst < "$TEMPLATE_DIR/ssl_site.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN.conf"
+            echo "[ssl] Loaded custom certificates for $DOMAIN"
+            reload_nginx
+        else
+            echo "[ssl] WARNING: Certificate files not found!"
+            echo "[ssl] Expected: $SSL_PATH/$DOMAIN/$SSL_KEY"
+            echo "[ssl] Expected: $SSL_PATH/$DOMAIN/$SSL_PRIV_KEY"
+        fi
+
+    # =========================================================================
+    # SSL=0 or other - No SSL
+    # =========================================================================
     else
-        echo "Using local certificates for $DOMAIN"
+        echo "[ssl] Mode: No SSL (HTTP only)"
+        echo "[ssl] To enable SSL, set SSL=free or SSL=self in .env"
     fi
+
+else
+    echo "[ssl] Skipping SSL setup (ENVIRONMENT=$ENVIRONMENT)"
 fi
+
+echo "[ssl] ========================================"
+echo "[ssl] SSL Setup Complete"
+echo "[ssl] ========================================"

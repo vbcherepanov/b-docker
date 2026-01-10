@@ -57,8 +57,11 @@ RUN if [ "$MAIL_CONFIG" = "1" ]; then \
         envsubst < /var/template/rabbit.conf.tmpl > /etc/nginx/conf.d/rabbitmq_$DOMAIN.conf; \
     fi
 
+# --- Копирование entrypoint ---
+COPY --chown=$UID:$GID /docker/nginx/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
 # --- Разрешения на скрипты ---
-RUN chmod +x /usr/local/bin/script/*
+RUN chmod +x /usr/local/bin/script/* /usr/local/bin/docker-entrypoint.sh
 
 # --- Установка нужных пакетов ---
 RUN \
@@ -101,5 +104,6 @@ WORKDIR /home/$UGN/app
 HEALTHCHECK --interval=300s --timeout=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# --- Старт nginx ---
+# --- Entrypoint и старт nginx ---
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
