@@ -19,8 +19,13 @@ export DOLLAR='$'
 reload_nginx() {
     echo "[nginx] Reloading configuration..."
     if nginx -t; then
-        nginx -s reload
-        echo "[nginx] Configuration reloaded successfully"
+        # Check if nginx is running (PID file exists and process is alive)
+        if [ -f /var/run/nginx.pid ] && kill -0 $(cat /var/run/nginx.pid) 2>/dev/null; then
+            nginx -s reload
+            echo "[nginx] Configuration reloaded successfully"
+        else
+            echo "[nginx] Nginx not running yet, skip reload (configs will be loaded on start)"
+        fi
     else
         echo "[nginx] ERROR: Invalid configuration!"
         exit 1

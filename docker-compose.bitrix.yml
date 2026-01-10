@@ -51,7 +51,7 @@ x-volumes:
 
   # Бэкапы и SSL
   backup-data: &backup-data ./backups:/backups
-  ssl-certs: &ssl-certs ./ssl:/etc/ssl/certs
+  ssl-certs: &ssl-certs ./ssl:/etc/nginx/ssl
   letsencrypt-certs: &letsencrypt-certs /etc/letsencrypt:/etc/letsencrypt
 
   # Docker логи для Promtail
