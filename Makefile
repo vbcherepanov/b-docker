@@ -47,8 +47,8 @@ dev-logs:
 dev-ps:
 	$(DOCKER_COMPOSE) $(PROFILES_DEV) ps
 
-# PROD: prod + push + monitoring + backup (для production)
-PROFILES_PROD = --profile prod --profile push --profile monitoring --profile backup
+# PROD: prod + push + monitoring + backup + rabbitmq (для production)
+PROFILES_PROD = --profile prod --profile push --profile monitoring --profile backup --profile rabbitmq
 prod: build-base
 	$(DOCKER_COMPOSE) $(PROFILES_PROD) build
 	$(DOCKER_COMPOSE) $(PROFILES_PROD) up -d
