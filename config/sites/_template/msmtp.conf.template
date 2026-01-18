@@ -1,0 +1,20 @@
+# ============================================================================
+# MSMTP CONFIGURATION: {{DOMAIN}}
+# Generated: {{GENERATED_DATE}}
+# ============================================================================
+# This file is used by sendmail-wrapper.sh for per-site email routing
+
+# Account for this site
+account {{DB_NAME}}
+host {{SMTP_HOST}}
+port {{SMTP_PORT}}
+from {{SMTP_FROM}}
+auth {{SMTP_AUTH}}
+{{SMTP_USER_LINE}}
+{{SMTP_PASSWORD_LINE}}
+{{SMTP_TLS_LINE}}
+{{SMTP_STARTTLS_LINE}}
+logfile /var/log/msmtp/{{DOMAIN}}.log
+
+# Set as default for this config
+account default : {{DB_NAME}}

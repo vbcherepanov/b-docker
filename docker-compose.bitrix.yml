@@ -13,32 +13,19 @@ name: ${COMPOSE_PROJECT_NAME:-bitrix}
 
 # Volumes шаблоны
 x-volumes:
-  # Основной код приложения
+  # Основной код приложения (мультисайт)
+  # Структура: www/${DOMAIN}/www/ — каждый сайт в своей папке
   app-code: &app-code
     type: bind
     source: ./www
     target: /home/${UGN}/app
 
-  # Битрикс специфичные папки (монтируются отдельно для гибкости)
-  app-upload: &app-upload
-    type: bind
-    source: ./www/upload
-    target: /home/${UGN}/app/upload
-
-  app-local: &app-local
-    type: bind
-    source: ./www/local
-    target: /home/${UGN}/app/local
-
-  app-bitrix-cache: &app-bitrix-cache
-    type: bind
-    source: ./www/bitrix/cache
-    target: /home/${UGN}/app/bitrix/cache
-
   # Конфигурационные файлы
   msmtp: &msmtp ./config/msmtp/msmtprc:/etc/msmtprc
   # NOTE: dcron in Alpine requires root crontab for reliable execution
   crontab: &crontab ./config/cron/crontab:/etc/crontabs/root
+  # Per-site configurations (DB credentials, SMTP, etc.)
+  sites-config: &sites-config ./config/sites:/etc/bitrix-sites:ro
 
   # Логи (доступны и для хоста и для Promtail)
   logs-nginx: &logs-nginx ./volume/logs/nginx:/var/log/nginx
@@ -149,21 +136,20 @@ services:
       PHP_OPCACHE_MAX_FILES: ${PHP_OPCACHE_MAX_FILES:-10000}
 
     volumes:
-      # Основной код приложения
+      # Основной код приложения (мультисайт: www/${DOMAIN}/www/)
       - *app-code
-      # Битрикс специфичные папки (отдельное монтирование для контроля прав)
-      - *app-upload
-      - *app-local
-      - *app-bitrix-cache
       # Конфигурации
       - *msmtp
       - *crontab
+      - *sites-config
       # Логи
       - *logs-php
       - *logs-php-fpm
       - *logs-cron
       - *logs-supervisor
       - *logs-bitrix
+      # MSMTP логи (per-site)
+      - ./volume/logs/msmtp:/var/log/msmtp
       # Composer cache (для ускорения установки зависимостей)
       - composer-cache:/home/${UGN}/.composer
 
@@ -252,8 +238,9 @@ services:
       - *logs-letsencrypt
       - *ssl-certs
       - *letsencrypt-certs
-      # Конфиги генерируются при сборке образа из templates
-      # SSL сертификаты хранятся в letsencrypt volume
+      # Мультисайтовые конфиги и SSL
+      - ./config/nginx/sites:/etc/nginx/sites-enabled:ro
+      - ./config/nginx/ssl:/etc/nginx/ssl:ro
 
     # depends_on убран чтобы избежать циклической зависимости с bitrix
     # nginx может запускаться независимо и будет отдавать 502 пока PHP-FPM недоступен
@@ -295,7 +282,7 @@ services:
       - --sql-mode=NO_ENGINE_SUBSTITUTION
       # FIXME: O_DIRECT causes issues on macOS/ARM
       # - --innodb-flush-method=O_DIRECT
-      - --innodb-buffer-pool-size=512M
+      - --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-512M}
       - --max-connections=${MYSQL_MAX_CONNECTIONS:-200}
 
     environment:
@@ -591,7 +578,7 @@ services:
 
   grafana:
     container_name: ${DOMAIN}_grafana
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.3.1
 
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -623,7 +610,7 @@ services:
 
   prometheus:
     container_name: ${DOMAIN}_prometheus
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.49.1
 
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -657,7 +644,7 @@ services:
 
   loki:
     container_name: ${DOMAIN}_loki
-    image: grafana/loki:latest
+    image: grafana/loki:2.9.4
 
     # Run as root to fix volume permissions
     user: root
@@ -687,7 +674,7 @@ services:
 
   promtail:
     container_name: ${DOMAIN}_promtail
-    image: grafana/promtail:latest
+    image: grafana/promtail:2.9.4
 
     command: -config.file=/etc/promtail/config.yml
 
@@ -978,7 +965,7 @@ services:
       - NET_ADMIN
       - NET_RAW
 
-    privileged: true
+    privileged: false
 
     restart: unless-stopped
 

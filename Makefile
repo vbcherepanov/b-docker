@@ -12,7 +12,93 @@ GID ?= $(shell id -g)
 UGN ?=bitrix
 NETWORK_NAME ?=${DOMAIN}_network
 
-.PHONY: reload-cron up init down build docker-build docker-up docker-down-clear test init composer-install cli cron-agent tests-run init-system create-unit-test create_dump monitoring-up monitoring-down portainer-up portainer-down backup-db backup-files backup-full set-local set-dev set-prod ssl-generate logs-nginx logs-php status clean-volumes clean-images clean-all disk-usage
+.PHONY: reload-cron up init down build docker-build docker-up docker-down-clear test init composer-install cli cron-agent tests-run init-system create-unit-test create_dump monitoring-up monitoring-down portainer-up portainer-down backup-db backup-files backup-full set-local set-dev set-prod ssl-generate logs-nginx logs-php status clean-volumes clean-images clean-all disk-usage setup first-run quick-start
+
+# ============================================================================
+# 🚀 БЫСТРЫЙ СТАРТ (НАЧАЛО РАБОТЫ С НУЛЯ)
+# ============================================================================
+# make setup      - Подготовка окружения (генерация секретов, оптимизация, валидация)
+# make first-run  - Полная инициализация с нуля (setup + build + up)
+# make quick-start - Быстрый запуск для разработки
+
+# Полная подготовка окружения (БЕЗ запуска контейнеров)
+setup:
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║          BITRIX DOCKER - ПОДГОТОВКА ОКРУЖЕНИЯ              ║"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo ""
+	@echo "📋 Шаг 1/4: Генерация безопасных паролей..."
+	@chmod +x ./scripts/generate-secrets.sh && ./scripts/generate-secrets.sh --update-env
+	@echo ""
+	@echo "⚙️  Шаг 2/4: Оптимизация конфигураций под сервер..."
+	@chmod +x ./scripts/auto-optimize.sh && ./scripts/auto-optimize.sh --force --update-env
+	@echo ""
+	@echo "🔒 Шаг 3/4: Применение security fixes..."
+	@chmod +x ./scripts/apply-security-fixes.sh && ./scripts/apply-security-fixes.sh
+	@echo ""
+	@echo "✅ Шаг 4/4: Валидация конфигурации..."
+	@chmod +x ./scripts/validate-env.sh && ./scripts/validate-env.sh
+	@echo ""
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║  ✅ ПОДГОТОВКА ЗАВЕРШЕНА!                                  ║"
+	@echo "║                                                            ║"
+	@echo "║  Следующий шаг: make first-run                             ║"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+
+# Инициализация основного сайта (мультисайтовая структура)
+init-main-site:
+	@echo "📁 Создание структуры основного сайта $(DOMAIN)..."
+	@mkdir -p www/$(DOMAIN)/www/bitrix/cache
+	@mkdir -p www/$(DOMAIN)/www/upload
+	@mkdir -p www/$(DOMAIN)/www/local
+	@if [ ! -f "www/$(DOMAIN)/www/index.php" ]; then \
+		echo '<?php echo "Site $(DOMAIN) is ready!"; phpinfo();' > www/$(DOMAIN)/www/index.php; \
+	fi
+	@echo "✅ Структура создана: www/$(DOMAIN)/www/"
+
+# Полная инициализация с нуля (для первого запуска)
+first-run: setup docker-network-create init-main-site build-base
+	@echo ""
+	@echo "🏗️  Сборка и запуск контейнеров..."
+	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) build
+	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) up -d
+	@echo ""
+	@echo "⏳ Ожидание готовности MySQL (30 секунд)..."
+	@sleep 30
+	@echo ""
+	@echo "🔧 Настройка nginx..."
+	@$(DOCKER_COMPOSE) $(PROFILES_LOCAL) exec --user root nginx /usr/local/bin/script/main.sh || true
+	@echo ""
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║  🎉 ПЕРВЫЙ ЗАПУСК ЗАВЕРШЁН!                                ║"
+	@echo "║                                                            ║"
+	@echo "║  🌐 Сайт:      http://$(DOMAIN)                            ║"
+	@echo "║  📧 MailHog:   http://$(DOMAIN):8025                       ║"
+	@echo "║  📊 Grafana:   http://$(DOMAIN):3000                       ║"
+	@echo "║                                                            ║"
+	@echo "║  Команды:                                                  ║"
+	@echo "║    make local-logs   - Логи                                ║"
+	@echo "║    make local-ps     - Статус контейнеров                  ║"
+	@echo "║    make local-down   - Остановить                          ║"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+
+# Быстрый старт (без полной настройки)
+quick-start: docker-network-create build-base
+	@echo "🚀 Быстрый старт..."
+	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) build
+	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) up -d
+	@echo "✅ Контейнеры запущены. Статус: make local-ps"
+
+# Первый запуск для production
+first-run-prod: setup docker-network-create build-base
+	@echo ""
+	@echo "🏗️  Сборка и запуск контейнеров (production)..."
+	$(DOCKER_COMPOSE) $(PROFILES_PROD) build
+	$(DOCKER_COMPOSE) $(PROFILES_PROD) up -d
+	@sleep 30
+	@$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx /usr/local/bin/script/main.sh || true
+	@echo ""
+	@echo "✅ Production запущен!"
 
 # ============================================================================
 # ПРОСТЫЕ КОМАНДЫ ДЛЯ ЗАПУСКА ВСЕГО СТЕКА
@@ -358,83 +444,29 @@ disk-usage:
 	docker system df
 
 # ==========================================
-# УПРАВЛЕНИЕ САЙТАМИ
+# 💾 СИСТЕМА БЭКАПОВ (PER-SITE)
 # ==========================================
 
-# Добавление нового сайта
-# Использование: make site-add DOMAIN=example.com PHP_VERSION=8.3
-site-add:
-	@if [ -z "$(DOMAIN)" ]; then \
-		echo "ОШИБКА: Необходимо указать DOMAIN. Пример: make site-add DOMAIN=example.com"; \
-		exit 1; \
-	fi
-	@./docker/common/scripts/site-manager.sh add "$(DOMAIN)" "$(PHP_VERSION)"
-
-# Удаление сайта
-# Использование: make site-remove DOMAIN=example.com
-site-remove:
-	@if [ -z "$(DOMAIN)" ]; then \
-		echo "ОШИБКА: Необходимо указать DOMAIN. Пример: make site-remove DOMAIN=example.com"; \
-		exit 1; \
-	fi
-	@./docker/common/scripts/site-manager.sh remove "$(DOMAIN)"
-
-# Список всех сайтов
-site-list:
-	@./docker/common/scripts/site-manager.sh list
-
-# Создание SSL сертификата для сайта
-# Использование: make ssl-generate DOMAIN=example.com
-ssl-generate:
-	@if [ -z "$(DOMAIN)" ]; then \
-		echo "ОШИБКА: Необходимо указать DOMAIN. Пример: make ssl-generate DOMAIN=example.com"; \
-		exit 1; \
-	fi
-	@./docker/common/scripts/site-manager.sh ssl "$(DOMAIN)" generate
-
-# Удаление SSL сертификата
-# Использование: make ssl-remove DOMAIN=example.com
-ssl-remove:
-	@if [ -z "$(DOMAIN)" ]; then \
-		echo "ОШИБКА: Необходимо указать DOMAIN. Пример: make ssl-remove DOMAIN=example.com"; \
-		exit 1; \
-	fi
-	@./docker/common/scripts/site-manager.sh ssl "$(DOMAIN)" remove
-
-# Получение SSL сертификата от Let's Encrypt
-# Использование: make ssl-letsencrypt EMAIL=admin@example.com
-ssl-letsencrypt:
-	@if [ -z "$(EMAIL)" ]; then \
-		echo "ОШИБКА: Необходимо указать EMAIL. Пример: make ssl-letsencrypt EMAIL=admin@example.com"; \
-		exit 1; \
-	fi
-	@chmod +x ./config/certbot/init-ssl.sh
-	@./config/certbot/init-ssl.sh "$(EMAIL)" "$(DOMAIN)"
-
-# Обновление SSL сертификата Let's Encrypt
-ssl-renew:
-	@certbot renew
-
-# Проверка обновления SSL (dry-run)
-ssl-renew-test:
-	@certbot renew --dry-run
-
-# ==========================================
-# СИСТЕМА БЭКАПОВ
-# ==========================================
+# Список доступных сайтов для бэкапа
+# Использование: make backup-sites
+backup-sites:
+	@./docker/common/scripts/backup-manager.sh sites
 
 # Бэкап базы данных
-# Использование: make backup-db [SITE=example.com]
+# Использование: make backup-db                    # Все сайты
+#               make backup-db SITE=example.com   # Конкретный сайт
 backup-db:
 	@./docker/common/scripts/backup-manager.sh database $(SITE)
 
 # Бэкап файлов
-# Использование: make backup-files [SITE=example.com]
+# Использование: make backup-files                    # Все сайты
+#               make backup-files SITE=example.com   # Конкретный сайт
 backup-files:
 	@./docker/common/scripts/backup-manager.sh files $(SITE)
 
 # Полный бэкап (база + файлы)
-# Использование: make backup-full [SITE=example.com]
+# Использование: make backup-full                    # Все сайты
+#               make backup-full SITE=example.com   # Конкретный сайт
 backup-full:
 	@./docker/common/scripts/backup-manager.sh full $(SITE)
 
@@ -455,22 +487,90 @@ backup-list-files:
 	@./docker/common/scripts/backup-manager.sh list files
 
 # Восстановление базы данных
-# Использование: make backup-restore-db FILE=backup.sql.gz [DB_NAME=database_name]
+# Использование: make backup-restore-db FILE=backup.sql.gz                    # В основную БД
+#               make backup-restore-db FILE=backup.sql.gz SITE=example.com   # В per-site БД
 backup-restore-db:
 	@if [ -z "$(FILE)" ]; then \
-		echo "ОШИБКА: Необходимо указать FILE. Пример: make backup-restore-db FILE=backup.sql.gz"; \
+		echo "❌ ОШИБКА: Необходимо указать FILE"; \
+		echo ""; \
+		echo "Примеры:"; \
+		echo "  make backup-restore-db FILE=backups/database/shop_local_20260118.sql.gz"; \
+		echo "  make backup-restore-db FILE=backup.sql.gz SITE=shop.local"; \
+		echo ""; \
+		echo "Доступные бэкапы:"; \
+		./docker/common/scripts/backup-manager.sh list database 2>/dev/null | head -20 || echo "  (нет бэкапов)"; \
 		exit 1; \
 	fi
-	@./docker/common/scripts/backup-manager.sh restore database "$(FILE)" $(DB_NAME)
+	@./docker/common/scripts/backup-manager.sh restore database "$(FILE)" $(SITE)
 
 # Восстановление файлов
-# Использование: make backup-restore-files FILE=backup.tar.gz [SITE=example.com]
+# Использование: make backup-restore-files FILE=backup.tar.gz                    # Все сайты
+#               make backup-restore-files FILE=backup.tar.gz SITE=example.com   # Конкретный сайт
 backup-restore-files:
 	@if [ -z "$(FILE)" ]; then \
-		echo "ОШИБКА: Необходимо указать FILE. Пример: make backup-restore-files FILE=backup.tar.gz"; \
+		echo "❌ ОШИБКА: Необходимо указать FILE"; \
+		echo ""; \
+		echo "Примеры:"; \
+		echo "  make backup-restore-files FILE=backups/files/shop_local_20260118.tar.gz"; \
+		echo "  make backup-restore-files FILE=backup.tar.gz SITE=shop.local"; \
+		echo ""; \
+		echo "Доступные бэкапы:"; \
+		./docker/common/scripts/backup-manager.sh list files 2>/dev/null | head -20 || echo "  (нет бэкапов)"; \
 		exit 1; \
 	fi
 	@./docker/common/scripts/backup-manager.sh restore files "$(FILE)" $(SITE)
+
+# Восстановление полного бэкапа (БД + файлы)
+# Использование: make backup-restore-full DIR=backups/full/shop_local_20260118 [SITE=example.com]
+backup-restore-full:
+	@if [ -z "$(DIR)" ]; then \
+		echo "❌ ОШИБКА: Необходимо указать DIR (папку полного бэкапа)"; \
+		echo ""; \
+		echo "Примеры:"; \
+		echo "  make backup-restore-full DIR=backups/full/shop_local_20260118_120000"; \
+		echo "  make backup-restore-full DIR=backups/full/shop_local_20260118_120000 SITE=shop.local"; \
+		echo ""; \
+		echo "Доступные полные бэкапы:"; \
+		ls -1d backups/full/*/ 2>/dev/null | head -20 || echo "  (нет бэкапов)"; \
+		exit 1; \
+	fi
+	@./docker/common/scripts/backup-manager.sh restore full "$(DIR)" $(SITE)
+
+# ==========================================
+# PER-SITE DATABASE MANAGEMENT
+# ==========================================
+
+# Инициализация базы данных для сайта
+# Использование: make db-init-site SITE=shop.local
+db-init-site:
+	@if [ -z "$(SITE)" ]; then \
+		echo "ОШИБКА: Необходимо указать SITE. Пример: make db-init-site SITE=shop.local"; \
+		exit 1; \
+	fi
+	@if [ ! -f "config/sites/$(SITE)/database-init.sql" ]; then \
+		echo "ОШИБКА: Файл config/sites/$(SITE)/database-init.sql не найден"; \
+		echo "Сначала добавьте сайт: make site-add SITE=$(SITE)"; \
+		exit 1; \
+	fi
+	@echo "🗄️  Создание базы данных для $(SITE)..."
+	@docker exec -i $(DOMAIN)_mysql mysql -u root -p'$(DB_ROOT_PASSWORD)' < config/sites/$(SITE)/database-init.sql
+	@echo "✅ База данных и пользователь созданы для $(SITE)"
+	@grep -E "^(DB_NAME|DB_USER)=" config/sites/$(SITE)/site.env | sed 's/^/   /'
+
+# Список per-site баз данных
+db-list-sites:
+	@echo "📋 Per-site базы данных:"
+	@echo ""
+	@for dir in config/sites/*/; do \
+		site=$$(basename "$$dir"); \
+		if [ "$$site" != "_template" ] && [ -f "$$dir/site.env" ]; then \
+			db_name=$$(grep '^DB_NAME=' "$$dir/site.env" | cut -d'=' -f2); \
+			db_user=$$(grep '^DB_USER=' "$$dir/site.env" | cut -d'=' -f2); \
+			echo "  📦 $$site"; \
+			echo "     DB: $$db_name | User: $$db_user"; \
+		fi; \
+	done
+	@echo ""
 
 # ==========================================
 # БЫСТРЫЕ КОМАНДЫ ДЛЯ МУЛЬТИСАЙТОВ
@@ -535,36 +635,247 @@ auto-config-manual:
 # ПОМОЩЬ И ИНФОРМАЦИЯ
 # ==========================================
 
+# ==========================================
+# 🌐 УПРАВЛЕНИЕ САЙТАМИ (МУЛЬТИСАЙТ)
+# ==========================================
+
+# Добавить сайт (ПОЛНАЯ АВТОМАТИЗАЦИЯ)
+# Создаёт: директории, nginx конфиг, per-site конфиги, БД, перезагружает всё
+# Использование: make site-add SITE=example.com
+#               make site-add SITE=example.com SSL=yes
+#               make site-add SITE=example.com PHP=8.4 SSL=letsencrypt
+site-add:
+	@if [ -z "$(SITE)" ]; then \
+		echo "❌ Укажите домен: make site-add SITE=example.com"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║  🚀 ДОБАВЛЕНИЕ САЙТА: $(SITE)"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo ""
+	@echo "📁 [1/4] Создание структуры и конфигов..."
+	@./scripts/site.sh add $(SITE) $(if $(PHP),--php=$(PHP)) $(if $(filter yes true 1,$(SSL)),--ssl) $(if $(filter letsencrypt le,$(SSL)),--ssl=letsencrypt)
+	@echo ""
+	@echo "🗄️  [2/4] Создание базы данных..."
+	@if docker ps --format '{{.Names}}' | grep -q "$(DOMAIN)_mysql"; then \
+		if [ -f "config/sites/$(SITE)/database-init.sql" ]; then \
+			docker exec -i $(DOMAIN)_mysql mysql -u root -p'$(DB_ROOT_PASSWORD)' < config/sites/$(SITE)/database-init.sql 2>/dev/null && \
+			echo "   ✅ База данных создана" || \
+			echo "   ⚠️  БД уже существует или ошибка (это нормально при повторном добавлении)"; \
+		fi; \
+	else \
+		echo "   ⚠️  MySQL не запущен, БД будет создана позже: make db-init-site SITE=$(SITE)"; \
+	fi
+	@echo ""
+	@echo "🔄 [3/4] Перезагрузка nginx..."
+	@if docker ps --format '{{.Names}}' | grep -q "$(DOMAIN)_nginx"; then \
+		docker exec $(DOMAIN)_nginx nginx -t 2>/dev/null && \
+		docker exec $(DOMAIN)_nginx nginx -s reload 2>/dev/null && \
+		echo "   ✅ Nginx перезагружен" || \
+		echo "   ⚠️  Ошибка перезагрузки nginx"; \
+	else \
+		echo "   ⚠️  Nginx не запущен"; \
+	fi
+	@echo ""
+	@echo "📋 [4/4] Итоговая информация..."
+	@echo ""
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║  ✅ САЙТ $(SITE) ДОБАВЛЕН!"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo ""
+	@echo "  📂 Document Root:  www/$(SITE)/www/"
+	@echo "  ⚙️  Site Config:    config/sites/$(SITE)/"
+	@echo "  🌐 Nginx Config:   config/nginx/sites/$(SITE).conf"
+	@if [ -f "config/sites/$(SITE)/site.env" ]; then \
+		echo ""; \
+		echo "  🗄️  Database:"; \
+		grep -E "^(DB_NAME|DB_USER|DB_PASSWORD)=" config/sites/$(SITE)/site.env | sed 's/^/     /'; \
+	fi
+	@echo ""
+	@echo "  📝 Добавь в /etc/hosts:"
+	@echo "     127.0.0.1 $(SITE) www.$(SITE)"
+	@echo ""
+
+# Удалить сайт (ПОЛНОЕ УДАЛЕНИЕ: файлы + конфиги + БД)
+# Использование: make site-remove SITE=example.com
+site-remove:
+	@if [ -z "$(SITE)" ]; then \
+		echo "❌ Укажите домен: make site-remove SITE=example.com"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║  🗑️  УДАЛЕНИЕ САЙТА: $(SITE)"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo ""
+	@echo "⚠️  ВНИМАНИЕ: Будут удалены:"
+	@echo "   - Файлы сайта: www/$(SITE)/"
+	@echo "   - Конфигурации: config/sites/$(SITE)/"
+	@echo "   - Nginx конфиг: config/nginx/sites/$(SITE).conf"
+	@if [ -f "config/sites/$(SITE)/site.env" ]; then \
+		db_name=$$(grep '^DB_NAME=' config/sites/$(SITE)/site.env | cut -d'=' -f2); \
+		db_user=$$(grep '^DB_USER=' config/sites/$(SITE)/site.env | cut -d'=' -f2); \
+		echo "   - База данных: $$db_name"; \
+		echo "   - Пользователь БД: $$db_user"; \
+	fi
+	@echo ""
+	@read -p "Продолжить? [y/N]: " confirm && [ "$$confirm" = "y" ] || exit 0
+	@echo ""
+	@echo "🗄️  Удаление базы данных..."
+	@if docker ps --format '{{.Names}}' | grep -q "$(DOMAIN)_mysql" && [ -f "config/sites/$(SITE)/site.env" ]; then \
+		db_name=$$(grep '^DB_NAME=' config/sites/$(SITE)/site.env | cut -d'=' -f2); \
+		db_user=$$(grep '^DB_USER=' config/sites/$(SITE)/site.env | cut -d'=' -f2); \
+		docker exec $(DOMAIN)_mysql mysql -u root -p'$(DB_ROOT_PASSWORD)' -e "DROP DATABASE IF EXISTS \`$$db_name\`; DROP USER IF EXISTS '$$db_user'@'%';" 2>/dev/null && \
+		echo "   ✅ База данных и пользователь удалены" || \
+		echo "   ⚠️  Ошибка удаления БД (возможно уже удалена)"; \
+	else \
+		echo "   ⚠️  MySQL не запущен или site.env не найден"; \
+	fi
+	@echo ""
+	@echo "📁 Удаление файлов и конфигов..."
+	@./scripts/site.sh remove $(SITE) --no-confirm
+	@echo ""
+	@echo "🔄 Перезагрузка nginx..."
+	@if docker ps --format '{{.Names}}' | grep -q "$(DOMAIN)_nginx"; then \
+		docker exec $(DOMAIN)_nginx nginx -s reload 2>/dev/null && \
+		echo "   ✅ Nginx перезагружен" || true; \
+	fi
+	@echo ""
+	@echo "✅ Сайт $(SITE) полностью удалён"
+
+# Список всех сайтов
+site-list:
+	@./scripts/site.sh list
+
+# Включить SSL для сайта (самоподписанный)
+# Использование: make site-ssl SITE=example.com
+site-ssl:
+	@if [ -z "$(SITE)" ]; then \
+		echo "❌ Укажите домен: make site-ssl SITE=example.com"; \
+		exit 1; \
+	fi
+	@./scripts/site.sh ssl $(SITE)
+
+# Получить Let's Encrypt сертификат
+# Использование: make site-ssl-le SITE=example.com
+site-ssl-le:
+	@if [ -z "$(SITE)" ]; then \
+		echo "❌ Укажите домен: make site-ssl-le SITE=example.com"; \
+		exit 1; \
+	fi
+	@./scripts/site.sh ssl-le $(SITE)
+
+# Перезагрузить nginx (после изменения конфигов)
+site-reload:
+	@./scripts/site.sh reload
+
 # Показать помощь по управлению сайтами
 help-sites:
-	@echo "Команды управления сайтами:"
-	@echo "  make site-add DOMAIN=example.com [PHP_VERSION=8.3]  - Добавить сайт (PHP: 7.4, 8.3, 8.4)"
-	@echo "  make site-remove DOMAIN=example.com                 - Удалить сайт"
-	@echo "  make site-list                                      - Список сайтов"
-	@echo "  make bitrix-site DOMAIN=example.com                 - Создать Bitrix сайт"
-	@echo "  make site-clone FROM=source.com TO=target.com       - Клонировать сайт"
 	@echo ""
-	@echo "Команды SSL:"
-	@echo "  make ssl-generate DOMAIN=example.com                - Создать самоподписанный SSL"
-	@echo "  make ssl-remove DOMAIN=example.com                  - Удалить SSL сертификат"
-	@echo "  make ssl-letsencrypt EMAIL=admin@example.com        - Получить Let's Encrypt SSL"
-	@echo "  make ssl-renew                                      - Обновить Let's Encrypt SSL"
-	@echo "  make ssl-renew-test                                 - Тест обновления (dry-run)"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "  🌐 УПРАВЛЕНИЕ САЙТАМИ (МУЛЬТИСАЙТ)"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  🚀 Добавление сайта (полная автоматизация):"
+	@echo "    make site-add SITE=shop.local                    # Создаёт всё!"
+	@echo "    make site-add SITE=shop.local SSL=yes            # + SSL"
+	@echo "    make site-add SITE=prod.com SSL=letsencrypt      # + Let's Encrypt"
+	@echo "    make site-add SITE=api.local PHP=8.4             # + PHP 8.4"
+	@echo ""
+	@echo "    Автоматически создаёт:"
+	@echo "    ✓ Директории www/{site}/www/"
+	@echo "    ✓ Nginx конфиг"
+	@echo "    ✓ Per-site конфиги (DB credentials, SMTP)"
+	@echo "    ✓ Базу данных и пользователя MySQL"
+	@echo "    ✓ Перезагружает nginx"
+	@echo ""
+	@echo "  🗑️  Удаление сайта (полное):"
+	@echo "    make site-remove SITE=old.local                  # Удаляет ВСЁ включая БД"
+	@echo ""
+	@echo "  📋 Управление:"
+	@echo "    make site-list                                   # Список сайтов"
+	@echo "    make site-reload                                 # Перезагрузить nginx"
+	@echo "    make db-list-sites                               # Список per-site БД"
+	@echo "    make db-init-site SITE=...                       # Создать БД вручную"
+	@echo ""
+	@echo "  🔐 SSL сертификаты:"
+	@echo "    make site-ssl SITE=shop.local                    # Self-signed SSL"
+	@echo "    make site-ssl-le SITE=prod.com                   # Let's Encrypt"
+	@echo ""
+	@echo "  📁 Структура файлов:"
+	@echo "    www/"
+	@echo "    └── example.com/"
+	@echo "        └── www/              <- Document root"
+	@echo "            ├── index.php"
+	@echo "            ├── bitrix/"
+	@echo "            └── upload/"
+	@echo ""
+	@echo "    config/sites/"
+	@echo "    └── example.com/"
+	@echo "        ├── site.env          <- DB credentials"
+	@echo "        ├── msmtp.conf        <- Per-site SMTP"
+	@echo "        └── database-init.sql <- SQL для создания БД"
+	@echo "            └── bitrix/"
+	@echo ""
+	@echo "  После добавления сайта добавьте в /etc/hosts:"
+	@echo "    127.0.0.1 shop.local www.shop.local"
+	@echo ""
 
 # Показать помощь по бэкапам
 help-backup:
-	@echo "Команды управления бэкапами:"
-	@echo "  make backup-db [SITE=example.com]                   - Бэкап базы данных"
-	@echo "  make backup-files [SITE=example.com]                - Бэкап файлов"
-	@echo "  make backup-full [SITE=example.com]                 - Полный бэкап"
-	@echo "  make backup-cleanup                                 - Очистка старых бэкапов"
-	@echo "  make backup-list                                    - Список всех бэкапов"
-	@echo "  make backup-list-db                                 - Список бэкапов БД"
-	@echo "  make backup-list-files                              - Список бэкапов файлов"
 	@echo ""
-	@echo "Восстановление:"
-	@echo "  make backup-restore-db FILE=backup.sql.gz           - Восстановить БД"
-	@echo "  make backup-restore-files FILE=backup.tar.gz        - Восстановить файлы"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "  💾 СИСТЕМА БЭКАПОВ (PER-SITE)"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  📋 Информация:"
+	@echo "    make backup-sites                                  # Список сайтов для бэкапа"
+	@echo "    make backup-list                                   # Все бэкапы"
+	@echo "    make backup-list-db                                # Только БД"
+	@echo "    make backup-list-files                             # Только файлы"
+	@echo ""
+	@echo "  📦 Создание бэкапов:"
+	@echo "    make backup-db                                     # БД всех сайтов"
+	@echo "    make backup-db SITE=shop.local                     # БД одного сайта"
+	@echo "    make backup-files                                  # Файлы всех сайтов"
+	@echo "    make backup-files SITE=shop.local                  # Файлы одного сайта"
+	@echo "    make backup-full                                   # Полный бэкап всех"
+	@echo "    make backup-full SITE=shop.local                   # Полный бэкап одного"
+	@echo ""
+	@echo "  ♻️  Восстановление:"
+	@echo "    make backup-restore-db FILE=backup.sql.gz          # В основную БД"
+	@echo "    make backup-restore-db FILE=... SITE=shop.local    # В per-site БД"
+	@echo "    make backup-restore-files FILE=backup.tar.gz       # Файлы"
+	@echo "    make backup-restore-full DIR=backups/full/...      # Полный бэкап"
+	@echo ""
+	@echo "  🧹 Обслуживание:"
+	@echo "    make backup-cleanup                                # Удалить старые бэкапы"
+	@echo ""
+	@echo "  📁 Структура бэкапов:"
+	@echo "    backups/"
+	@echo "    ├── database/"
+	@echo "    │   ├── shop_local_20260118_120000.sql.gz"
+	@echo "    │   └── blog_local_20260118_120000.sql.gz"
+	@echo "    ├── files/"
+	@echo "    │   ├── shop_local_20260118_120000.tar.gz"
+	@echo "    │   └── blog_local_20260118_120000.tar.gz"
+	@echo "    └── full/"
+	@echo "        └── shop_local_20260118_120000/"
+	@echo "            ├── database.sql.gz"
+	@echo "            ├── files.tar.gz"
+	@echo "            └── manifest.txt"
+	@echo ""
+	@echo "  💡 Примеры:"
+	@echo "    # Бэкап только магазина"
+	@echo "    make backup-full SITE=shop.local"
+	@echo ""
+	@echo "    # Восстановить БД из бэкапа"
+	@echo "    make backup-restore-db FILE=backups/database/shop_local_20260118.sql.gz SITE=shop.local"
+	@echo ""
+	@echo "    # Восстановить полный бэкап"
+	@echo "    make backup-restore-full DIR=backups/full/shop_local_20260118_120000 SITE=shop.local"
+	@echo ""
 
 # Показать помощь по автоконфигурации
 help-autoconfig:
@@ -585,37 +896,81 @@ help-autoconfig:
 
 # Показать все доступные команды
 help:
-	@echo "=== BITRIX DOCKER ENVIRONMENT ==="
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║            BITRIX DOCKER ENVIRONMENT v2.0                  ║"
+	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
-	@echo "Основные команды:"
-	@echo "  make init-local     - Полная инициализация (локально)"
-	@echo "  make init-local-full - Полная инициализация с RabbitMQ (локально)"
-	@echo "  make init           - Полная инициализация (продакшн)"
-	@echo "  make up-local       - Запуск (локально)"
-	@echo "  make up-local-full  - Запуск с RabbitMQ (локально)"
-	@echo "  make up             - Запуск (продакшн)"
-	@echo "  make restart-local  - Перезапуск (локально)"
-	@echo "  make restart-local-full - Перезапуск с RabbitMQ (локально)"
-	@echo "  make restart        - Перезапуск (продакшн)"
-	@echo "  make down-local     - Остановка (локально)"
-	@echo "  make down-local-full - Остановка с RabbitMQ (локально)"
-	@echo "  make down           - Остановка (продакшн)"
+	@echo "🚀 БЫСТРЫЙ СТАРТ (новый проект):"
+	@echo "  make setup          - Подготовка (секреты + оптимизация + валидация)"
+	@echo "  make first-run      - Полная инициализация с нуля (всё в одной команде!)"
+	@echo "  make first-run-prod - Полная инициализация для production"
+	@echo "  make quick-start    - Быстрый запуск (без настройки)"
 	@echo ""
-	@echo "Переключение окружений:"
-	@echo "  make set-local      - Переключиться на local"
-	@echo "  make set-dev        - Переключиться на dev"
-	@echo "  make set-prod       - Переключиться на prod"
+	@echo "📦 Управление контейнерами:"
+	@echo "  make local          - Запуск для локальной разработки"
+	@echo "  make dev            - Запуск для dev сервера"
+	@echo "  make prod           - Запуск для production"
+	@echo "  make local-down     - Остановить (local)"
+	@echo "  make local-restart  - Перезапустить (local)"
+	@echo "  make local-logs     - Логи (local)"
+	@echo "  make local-ps       - Статус контейнеров"
 	@echo ""
-	@echo "Автоконфигурация системы:"
-	@echo "  make auto-config         - Автоматическая конфигурация"
-	@echo "  make auto-config-force   - Принудительная автоконфигурация"
-	@echo "  make auto-config-preview - Предварительный просмотр"
+	@echo "💾 Бэкапы (per-site):"
+	@echo "  make backup-sites                           - Список сайтов для бэкапа"
+	@echo "  make backup-full [SITE=shop.local]          - Полный бэкап"
+	@echo "  make backup-db [SITE=shop.local]            - Бэкап БД"
+	@echo "  make backup-files [SITE=shop.local]         - Бэкап файлов"
+	@echo "  make backup-list                            - Список бэкапов"
+	@echo "  make help-backup                            - Подробная справка"
 	@echo ""
-	@echo "Подробная помощь:"
-	@echo "  make help-sites     - Команды управления сайтами"
-	@echo "  make help-backup    - Команды управления бэкапами"
-	@echo "  make help-autoconfig - Команды автоконфигурации"
-	@echo "  make help-security  - Команды управления безопасностью"
+	@echo "🔒 Безопасность:"
+	@echo "  make security-up    - Включить Fail2ban"
+	@echo "  make security-stats - Статистика атак"
+	@echo ""
+	@echo "⚙️  Настройка:"
+	@echo "  make auto-config    - Автоконфигурация под сервер"
+	@echo "  make validate       - Валидация .env"
+	@echo ""
+	@echo "📖 Подробная помощь:"
+	@echo "  make help-quick     - Шпаргалка по основным командам"
+	@echo "  make help-sites     - Управление сайтами"
+	@echo "  make help-backup    - Управление бэкапами"
+	@echo "  make help-security  - Безопасность"
+	@echo "  make help-autoconfig - Автоконфигурация"
+
+# Шпаргалка по основным командам
+help-quick:
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "  ШПАРГАЛКА ПО КОМАНДАМ"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  🆕 Первый запуск:"
+	@echo "      make first-run"
+	@echo ""
+	@echo "  🔄 Ежедневная работа:"
+	@echo "      make local          # Запустить"
+	@echo "      make local-down     # Остановить"
+	@echo "      make local-restart  # Перезапустить"
+	@echo "      make local-logs     # Логи"
+	@echo ""
+	@echo "  💾 Бэкапы (per-site):"
+	@echo "      make backup-sites               # Список сайтов"
+	@echo "      make backup-full SITE=shop.local # Бэкап сайта"
+	@echo "      make backup-list                # Список бэкапов"
+	@echo ""
+	@echo "  🐚 Доступ к контейнерам:"
+	@echo "      make bash_cli_local # PHP CLI"
+	@echo "      make bash_nginx     # Nginx"
+	@echo ""
+	@echo "  📊 Мониторинг:"
+	@echo "      make local-ps       # Статус"
+	@echo "      make disk-usage     # Место на диске"
+	@echo ""
+
+# Валидация .env файла
+validate:
+	@chmod +x ./scripts/validate-env.sh && ./scripts/validate-env.sh
 
 # === КОМАНДЫ БЕЗОПАСНОСТИ ===
 

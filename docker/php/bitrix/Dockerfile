@@ -85,33 +85,34 @@ RUN apk add --no-cache \
 
 # ============================================================================
 # СОЗДАНИЕ СТРУКТУРЫ ДИРЕКТОРИЙ
-# Основные директории приложения, Битрикс, логи, Supervisor, Cron, PHP Sessions
+# Системные директории (логи, Supervisor, Cron, PHP Sessions)
+# NOTE: upload, local, bitrix/cache создаются внутри доменных папок
+#       в docker-entrypoint.sh при старте контейнера (multisite support)
 # ============================================================================
 RUN mkdir -p \
     "/home/${UGN}/app" \
     "/home/${UGN}/tmp" \
     "/home/${UGN}/run" \
     "/home/${UGN}/.composer" \
-    "/home/${UGN}/app/upload" \
-    "/home/${UGN}/app/local" \
-    "/home/${UGN}/app/bitrix/cache" \
-    "/home/${UGN}/app/bitrix/backup" \
-    "/home/${UGN}/app/bitrix/modules" \
     "/var/log/php" \
     "/var/log/php-fpm" \
     "/var/log/cron" \
     "/var/log/supervisor" \
     "/var/log/bitrix" \
+    "/var/log/msmtp" \
     "/var/run/supervisor" \
     "/etc/supervisor/conf.d" \
     "/etc/crontabs" \
+    "/etc/bitrix-sites" \
     "/var/lib/php/sessions" \
     && touch "/etc/crontabs/${UGN}"
 
 # ============================================================================
 # НАСТРОЙКА ПРАВ ДОСТУПА
 # ============================================================================
-# Битрикс требует специфичных прав на upload и cache директории
+# Системные директории и логи
+# NOTE: Права на upload и cache устанавливаются в docker-entrypoint.sh
+#       при инициализации каждого сайта (multisite support)
 # ============================================================================
 RUN chown -R "${UGN}:${UGN}" \
     "/home/${UGN}" \
@@ -120,12 +121,12 @@ RUN chown -R "${UGN}:${UGN}" \
     "/var/log/cron" \
     "/var/log/supervisor" \
     "/var/log/bitrix" \
+    "/var/log/msmtp" \
     "/var/run/supervisor" \
     "/etc/crontabs/${UGN}" \
     "/var/lib/php/sessions" \
     && chmod 600 "/etc/crontabs/${UGN}" \
     && chmod -R 755 "/home/${UGN}/app" \
-    && chmod -R 775 "/home/${UGN}/app/upload" "/home/${UGN}/app/bitrix/cache" \
     && chmod -R 770 "/var/lib/php/sessions" \
     && chmod -R 755 "/home/${UGN}/tmp"
 
@@ -152,7 +153,8 @@ COPY /config/logrotate/bitrix-logs.conf /etc/logrotate.d/bitrix
 COPY /docker/php/bitrix/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 COPY /docker/php/bitrix/healthcheck.sh /usr/local/bin/healthcheck
 COPY /docker/common/php/scripts /usr/local/bin/scripts
-RUN chmod +x /usr/local/bin/docker-entrypoint /usr/local/bin/healthcheck /usr/local/bin/scripts/*
+RUN chmod +x /usr/local/bin/docker-entrypoint /usr/local/bin/healthcheck && \
+    (chmod +x /usr/local/bin/scripts/* 2>/dev/null || true)
 
 # ============================================================================
 # ОЧИСТКА ОТЛАДОЧНЫХ ИНСТРУМЕНТОВ В ПРОДАКШН

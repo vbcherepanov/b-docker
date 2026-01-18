@@ -32,11 +32,8 @@ echo ""
 # ============================================================================
 echo -e "${YELLOW}[1/9] Checking directories...${NC}"
 
-REQUIRED_DIRS=(
-    "/home/${UGN}/app"
-    "/home/${UGN}/app/upload"
-    "/home/${UGN}/app/local"
-    "/home/${UGN}/app/bitrix/cache"
+# System directories (NOT in www/)
+SYSTEM_DIRS=(
     "/home/${UGN}/tmp"
     "/var/log/php"
     "/var/log/php-fpm"
@@ -46,12 +43,38 @@ REQUIRED_DIRS=(
     "/var/lib/php/sessions"
 )
 
-for dir in "${REQUIRED_DIRS[@]}"; do
+for dir in "${SYSTEM_DIRS[@]}"; do
     if [ ! -d "$dir" ]; then
         echo -e "  ${YELLOW}Creating directory: $dir${NC}"
         mkdir -p "$dir"
     fi
 done
+
+# Multisite: create directories INSIDE each domain folder, NOT in root www/
+# Structure: /home/bitrix/app/{domain}/www/bitrix/cache, /home/bitrix/app/{domain}/www/upload, etc.
+APP_DIR="/home/${UGN}/app"
+if [ -d "$APP_DIR" ]; then
+    for domain_dir in "$APP_DIR"/*/; do
+        if [ -d "$domain_dir" ]; then
+            domain=$(basename "$domain_dir")
+            site_www="$domain_dir/www"
+
+            # Only process valid domain folders (those with www/ subdirectory)
+            if [ -d "$site_www" ]; then
+                echo -e "  ${BLUE}Checking site: $domain${NC}"
+
+                # Create required Bitrix directories inside each site
+                for subdir in "bitrix/cache" "bitrix/managed_cache" "upload" "local"; do
+                    target="$site_www/$subdir"
+                    if [ ! -d "$target" ]; then
+                        echo -e "    ${YELLOW}Creating: $subdir${NC}"
+                        mkdir -p "$target"
+                    fi
+                done
+            fi
+        fi
+    done
+fi
 
 echo -e "${GREEN}  ✓ Directories checked${NC}"
 
@@ -67,19 +90,25 @@ if [ -d "/home/${UGN}/app" ]; then
     echo -e "${GREEN}  ✓ Ownership changed${NC}"
 fi
 
-# Битрикс требует специфичные права на некоторые директории
+# Multisite: set permissions for each site's directories
 # ВАЖНО: 775 вместо 777 для безопасности
 # Владелец bitrix имеет полный доступ, группа тоже, остальные только чтение+execute
-if [ -d "/home/${UGN}/app/upload" ]; then
-    chmod -R 775 "/home/${UGN}/app/upload" 2>/dev/null || true
-fi
-
-if [ -d "/home/${UGN}/app/bitrix/cache" ]; then
-    chmod -R 775 "/home/${UGN}/app/bitrix/cache" 2>/dev/null || true
-fi
-
-if [ -d "/home/${UGN}/app/bitrix/managed_cache" ]; then
-    chmod -R 775 "/home/${UGN}/app/bitrix/managed_cache" 2>/dev/null || true
+APP_DIR="/home/${UGN}/app"
+if [ -d "$APP_DIR" ]; then
+    for domain_dir in "$APP_DIR"/*/; do
+        if [ -d "$domain_dir" ]; then
+            site_www="$domain_dir/www"
+            if [ -d "$site_www" ]; then
+                # Set permissions for Bitrix writable directories
+                for subdir in "upload" "bitrix/cache" "bitrix/managed_cache"; do
+                    target="$site_www/$subdir"
+                    if [ -d "$target" ]; then
+                        chmod -R 775 "$target" 2>/dev/null || true
+                    fi
+                done
+            fi
+        fi
+    done
 fi
 
 # Логи должны быть доступны для записи

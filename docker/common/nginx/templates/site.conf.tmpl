@@ -1,14 +1,15 @@
 # =============================================================================
 # MAIN SITE - ${DOMAIN}
 # HTTP server for local/dev or when SSL is handled by proxy
+# Multi-site structure: www/${DOMAIN}/www/
 # =============================================================================
 server {
     listen 80;
-    server_name ${DOMAIN};
+    server_name ${DOMAIN} www.${DOMAIN};
 
     charset utf-8;
     index index.php;
-    root /home/${UGN}/app;
+    root /home/${UGN}/app/${DOMAIN}/www;
     server_tokens off;
 
     access_log /dev/stdout;

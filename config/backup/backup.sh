@@ -4,8 +4,11 @@
 DB_HOST=${DB_HOST:-mysql}
 DB_NAME=${DB_NAME:-bitrix}
 DB_USERNAME=${DB_USERNAME:-bitrix}
-DB_PASSWORD=${DB_PASSWORD:-bitrix123}
-DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-root123}
+# Security: Require explicit password
+if [ -z "${DB_PASSWORD:-}" ]; then echo "ERROR: DB_PASSWORD not set"; exit 1; fi
+DB_PASSWORD="${DB_PASSWORD}"
+if [ -z "${DB_ROOT_PASSWORD:-}" ]; then echo "ERROR: DB_ROOT_PASSWORD not set"; exit 1; fi
+DB_ROOT_PASSWORD="${DB_ROOT_PASSWORD}"
 BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
 
 # Директории
@@ -28,7 +31,9 @@ backup_database() {
 
     log "Начинаем бэкап базы данных: $DB_NAME"
 
-    if mysqldump -h "$DB_HOST" -u "$DB_USERNAME" -p"$DB_PASSWORD" \
+    # Use MYSQL_PWD to avoid password in process list
+    export MYSQL_PWD="$DB_PASSWORD"
+    if mysqldump -h "$DB_HOST" -u "$DB_USERNAME" \
         --single-transaction \
         --routines \
         --triggers \
@@ -36,6 +41,7 @@ backup_database() {
         --quick \
         --lock-tables=false \
         "$DB_NAME" | gzip > "$backup_file"; then
+        unset MYSQL_PWD
 
         log "Бэкап базы данных завершен: $backup_file"
 
@@ -48,6 +54,7 @@ backup_database() {
             return 1
         fi
     else
+        unset MYSQL_PWD
         log "ОШИБКА: Не удалось создать бэкап базы данных"
         return 1
     fi

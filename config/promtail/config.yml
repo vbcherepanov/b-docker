@@ -30,7 +30,7 @@ scrape_configs:
     pipeline_stages:
       - docker: {}
 
-  # Логи файлов Nginx
+  # Логи файлов Nginx (per-site with domain extraction)
   - job_name: nginx-logs
     static_configs:
       - targets:
@@ -40,6 +40,15 @@ scrape_configs:
           service: nginx
           __path__: /var/log/nginx/*.log
     pipeline_stages:
+      # Extract domain from log filename (e.g., shop.local.access.log -> shop.local)
+      - match:
+          selector: '{job="nginx"}'
+          stages:
+            - regex:
+                source: filename
+                expression: '/var/log/nginx/(?P<domain>[^.]+\.[^.]+)\.(access|error)\.log'
+            - labels:
+                domain: domain
       - match:
           selector: '{job="nginx"} |~ ".*access\\.log.*"'
           stages:
@@ -124,6 +133,43 @@ scrape_configs:
       - timestamp:
           source: timestamp
           format: '02 Jan 2006 15:04:05.000'
+
+  # Multisite Cron logs (with domain extraction)
+  - job_name: multisite-cron-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: cron
+          service: multisite-cron
+          __path__: /var/log/cron/multisite-cron.log
+    pipeline_stages:
+      # Format: [timestamp] [domain] [level] message
+      - regex:
+          expression: '^\[(?P<timestamp>[^\]]+)\] \[(?P<domain>[^\]]+)\] \[(?P<level>[^\]]+)\] (?P<message>.*)'
+      - labels:
+          domain: domain
+          level: level
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05'
+
+  # MSMTP logs (per-site email)
+  - job_name: msmtp-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: msmtp
+          service: msmtp
+          __path__: /var/log/msmtp/*.log
+    pipeline_stages:
+      # Extract domain from log filename (e.g., shop.local.log -> shop.local)
+      - regex:
+          source: filename
+          expression: '/var/log/msmtp/(?P<domain>[^.]+\.[^.]+)\.log'
+      - labels:
+          domain: domain
 
   # Остальные сервисы
   - job_name: all-service-logs

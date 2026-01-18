@@ -4,13 +4,29 @@
 .env.local
 .env.prod
 .env
+.env''
+.env.backup.*
+*.backup.*
 /www/*
 /ssl/*
 /volume/*
 .DS_Store
 
-# Security reports - содержат чувствительную информацию
+# Security reports - contain sensitive information
 /security-reports/*.html
 /security-reports/*.json
 /security-reports/*.txt
 /security-reports/*.xml
+
+# Per-site configurations (generated, contain passwords)
+/config/sites/*
+!/config/sites/_template/
+
+# Generated nginx site configs
+/config/nginx/sites/*
+
+# Backups
+/backups/*
+
+# Local override
+docker-compose.override.yml

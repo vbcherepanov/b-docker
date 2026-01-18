@@ -8,10 +8,10 @@
 
 ```bash
 # Быстрое сканирование
-./security-scan.sh quick
+./scripts/security-scan.sh quick
 
 # Полное сканирование
-./security-scan.sh full
+./scripts/security-scan.sh full
 ```
 
 ## Типы отчетов

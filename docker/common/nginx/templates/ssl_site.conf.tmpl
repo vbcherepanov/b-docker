@@ -1,12 +1,13 @@
 # =============================================================================
 # MAIN SITE - ${DOMAIN} (HTTPS)
 # Production with SSL/TLS
+# Multi-site structure: www/${DOMAIN}/www/
 # =============================================================================
 
 # HTTP to HTTPS redirect
 server {
     listen 80;
-    server_name ${DOMAIN};
+    server_name ${DOMAIN} www.${DOMAIN};
 
     # Allow ACME challenge for Let's Encrypt
     location /.well-known/acme-challenge/ {
@@ -22,7 +23,7 @@ server {
 # HTTPS server
 server {
     listen 443 ssl http2;
-    server_name ${DOMAIN};
+    server_name ${DOMAIN} www.${DOMAIN};
 
     # SSL certificates (Let's Encrypt or custom)
     ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
@@ -44,7 +45,7 @@ server {
 
     charset utf-8;
     index index.php;
-    root /home/${UGN}/app;
+    root /home/${UGN}/app/${DOMAIN}/www;
     server_tokens off;
 
     access_log /dev/stdout;
