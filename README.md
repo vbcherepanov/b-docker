@@ -466,6 +466,29 @@ make auto-config-preview                   # Preview configuration changes
 make auto-config-manual CPU_CORES=8 RAM_GB=16  # Manual configuration
 ```
 
+#### Auto-Optimize Details
+
+The `auto-config` command automatically calculates optimal values based on your server:
+
+| Component | Formula |
+|-----------|---------|
+| **MySQL buffer_pool** | 25-60% of RAM (depends on environment) |
+| **MySQL max_connections** | Min 200 for multisite |
+| **MySQL io_capacity** | 2000-4000 (SSD optimized) |
+| **Redis maxmemory** | 2-5% of RAM |
+| **PHP-FPM max_children** | CPU × 3-8 (depends on environment) |
+| **PHP-FPM max_requests** | 500-1000 |
+| **Memcached memory** | 1-2% of RAM |
+| **Nginx workers** | Number of CPU cores |
+
+Example for 12 CPU / 64GB RAM server:
+```
+MySQL buffer_pool:     16GB (local) / 38GB (prod)
+Redis maxmemory:       1GB (local) / 3GB (prod)
+PHP-FPM max_children:  36 (local) / 100 (prod)
+Memcached memory:      512MB
+```
+
 ### Help
 
 ```bash
@@ -570,11 +593,35 @@ Single cron dispatcher handles all sites:
 
 ### Logs with Domain Labels
 
-Filter logs by domain in Grafana:
+All logs are automatically labeled with the `domain` for easy filtering in Grafana:
+
+| Service | Domain Source |
+|---------|---------------|
+| **Nginx** | From log filename: `shop.local.access.log` |
+| **PHP-FPM** | From SCRIPT_FILENAME: `/home/bitrix/app/shop.local/www/` |
+| **Cron** | From log format: `[shop.local]` |
+| **MSMTP** | From log filename: `shop.local.log` |
+
+**Grafana LogQL queries:**
 
 ```logql
+# Nginx logs for specific domain
 {job="nginx", domain="shop.local"}
-{job="cron", domain="blog.local"}
+
+# PHP errors for specific domain
+{job="php-fpm", domain="api.local"} |= "error"
+
+# All cron logs
+{job="cron", domain=~".*"}
+
+# Nginx 5xx errors across all domains
+{job="nginx"} | json | status >= 500
+
+# Filter by multiple domains
+{job="nginx", domain=~"shop.local|blog.local"}
+
+# Slow PHP requests (from slow log)
+{job="php-fpm"} |= "pool www"
 ```
 
 ---
@@ -650,20 +697,32 @@ make backup-cleanup
 ### Log Search (Grafana Explore)
 
 ```logql
-# PHP errors
-{container_name="bitrix"} |= "error"
+# === By Service ===
+{job="nginx"}                              # All nginx logs
+{job="php-fpm"}                            # PHP-FPM logs
+{job="mysql"}                              # MySQL logs
+{job="cron"}                               # Multisite cron logs
 
-# Slow MySQL queries
-{job="mysql"} |= "slow"
+# === By Domain (Multisite) ===
+{job="nginx", domain="shop.local"}         # Nginx for specific site
+{job="php-fpm", domain="api.local"}        # PHP for specific site
+{domain="shop.local"}                      # All logs for domain
+{domain=~"shop.*"}                         # Regex match domains
 
-# Bitrix agents (cron)
-{job="cron"}
+# === Error Filtering ===
+{job="nginx"} | json | status >= 400       # HTTP errors
+{job="php-fpm"} |= "error"                 # PHP errors
+{job="php-fpm"} |= "Fatal"                 # Fatal PHP errors
+{job="mysql"} |= "slow"                    # Slow queries
 
-# Filter by domain
-{job="nginx", domain="shop.local"}
+# === Security ===
+{job="fail2ban"} |= "Ban"                  # Blocked IPs
+{job="modsecurity"} |= "Warning"           # WAF alerts
+{job="nginx"} |= "403"                     # Forbidden requests
 
-# Fail2ban blocks
-{job="fail2ban"} |= "Ban"
+# === Performance ===
+{job="php-fpm"} |= "pool www"              # Slow PHP requests
+{job="nginx"} | json | request_time > 1    # Slow HTTP requests
 ```
 
 ### Prometheus Metrics

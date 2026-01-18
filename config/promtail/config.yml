@@ -40,13 +40,14 @@ scrape_configs:
           service: nginx
           __path__: /var/log/nginx/*.log
     pipeline_stages:
-      # Extract domain from log filename (e.g., shop.local.access.log -> shop.local)
+      # Extract domain from log filename
+      # Handles: shop.local.access.log, api.shop.local.error.log, sub.domain.com.access.log
       - match:
           selector: '{job="nginx"}'
           stages:
             - regex:
                 source: filename
-                expression: '/var/log/nginx/(?P<domain>[^.]+\.[^.]+)\.(access|error)\.log'
+                expression: '/var/log/nginx/(?P<domain>.+)\.(access|error)\.log$'
             - labels:
                 domain: domain
       - match:
@@ -73,7 +74,7 @@ scrape_configs:
                 source: timestamp
                 format: '2006/01/02 15:04:05'
 
-  # Логи PHP-FPM
+  # Логи PHP-FPM (with domain extraction from script path)
   - job_name: php-fpm-logs
     static_configs:
       - targets:
@@ -93,6 +94,16 @@ scrape_configs:
       - timestamp:
           source: timestamp
           format: '02-Jan-2006 15:04:05'
+      # Extract domain from SCRIPT_FILENAME in slow logs
+      # Path format: /home/bitrix/app/{domain}/www/...
+      - match:
+          selector: '{job="php-fpm"}'
+          stages:
+            - regex:
+                source: message
+                expression: '/home/bitrix/app/(?P<domain>[^/]+)/www/'
+            - labels:
+                domain: domain
 
   # Логи MySQL
   - job_name: mysql-logs
@@ -154,7 +165,7 @@ scrape_configs:
           source: timestamp
           format: '2006-01-02 15:04:05'
 
-  # MSMTP logs (per-site email)
+  # MSMTP logs (per-site email with domain extraction)
   - job_name: msmtp-logs
     static_configs:
       - targets:
@@ -164,10 +175,11 @@ scrape_configs:
           service: msmtp
           __path__: /var/log/msmtp/*.log
     pipeline_stages:
-      # Extract domain from log filename (e.g., shop.local.log -> shop.local)
+      # Extract domain from log filename
+      # Handles: shop.local.log, api.shop.local.log, sub.domain.com.log
       - regex:
           source: filename
-          expression: '/var/log/msmtp/(?P<domain>[^.]+\.[^.]+)\.log'
+          expression: '/var/log/msmtp/(?P<domain>.+)\.log$'
       - labels:
           domain: domain
 

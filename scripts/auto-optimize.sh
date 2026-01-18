@@ -17,6 +17,7 @@ NC='\033[0m'
 
 # Переменные
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DRY_RUN=false
 FORCE=false
 UPDATE_ENV=false
@@ -110,8 +111,8 @@ detect_ram_gb() {
 detect_environment() {
     [ -n "$ENVIRONMENT" ] && echo "$ENVIRONMENT" && return
 
-    if [ -f "$SCRIPT_DIR/.env" ]; then
-        grep -E "^ENVIRONMENT=" "$SCRIPT_DIR/.env" 2>/dev/null | cut -d'=' -f2 || echo "local"
+    if [ -f "$PROJECT_DIR/.env" ]; then
+        grep -E "^ENVIRONMENT=" "$PROJECT_DIR/.env" 2>/dev/null | cut -d'=' -f2 || echo "local"
     else
         echo "local"
     fi
@@ -123,7 +124,7 @@ detect_environment() {
 
 generate_mysql_config() {
     local cpu=$1 ram=$2 env=$3
-    local output="$SCRIPT_DIR/config/mysql/my.conf"
+    local output="$PROJECT_DIR/config/mysql/my.conf"
 
     log_info "Генерация MySQL конфигурации..."
 
@@ -134,25 +135,27 @@ generate_mysql_config() {
     case "$env" in
         local)
             buffer_pool=$((ram * 256))          # 256MB per GB for local
-            max_conn=100
+            max_conn=200                         # Enough for multisite
             flush_commit=2                       # Faster writes
-            io_capacity=1000
+            io_capacity=2000                     # Higher for SSD (common on dev machines)
             tmp_table=64
             slow_time=2
             ;;
         dev)
             buffer_pool=$((ram * 512))          # 512MB per GB for dev
             max_conn=$((cpu * 30))
+            [ "$max_conn" -lt 200 ] && max_conn=200
             flush_commit=2
-            io_capacity=1500
+            io_capacity=2000                     # SSD-optimized
             tmp_table=128
             slow_time=2
             ;;
         prod)
             buffer_pool=$((ram * 1024 * 60 / 100))  # 60% RAM for prod
             max_conn=$((cpu * 50))
+            [ "$max_conn" -lt 200 ] && max_conn=200
             flush_commit=1                       # Safe writes
-            io_capacity=2000
+            io_capacity=4000                     # High for NVMe SSD
             tmp_table=256
             slow_time=3
             ;;
@@ -160,7 +163,7 @@ generate_mysql_config() {
 
     # Минимумы
     [ "$buffer_pool" -lt 256 ] && buffer_pool=256
-    [ "$max_conn" -lt 50 ] && max_conn=50
+    [ "$max_conn" -lt 100 ] && max_conn=100
 
     thread_cache=$((cpu * 4))
     table_cache=$((max_conn * 2))
@@ -262,21 +265,43 @@ EOF
 }
 
 # ============================================================================
-# ГЕНЕРАЦИЯ Redis КОНФИГУРАЦИИ (С SECURITY!)
+# ГЕНЕРАЦИЯ Redis КОНФИГУРАЦИИ (Docker-compatible!)
 # ============================================================================
 
 generate_redis_config() {
     local cpu=$1 ram=$2 env=$3
-    local output="$SCRIPT_DIR/config/redis/redis.conf"
+    local output="$PROJECT_DIR/config/redis/redis.conf"
 
     log_info "Генерация Redis конфигурации..."
 
-    local maxmem
+    # Memory calculation: scale with available RAM
+    # Formula: 2-5% of total RAM depending on environment
+    local maxmem_mb percent
     case "$env" in
-        local) maxmem="256mb" ;;
-        dev)   maxmem="512mb" ;;
-        prod)  maxmem="$((ram * 1024 * 20 / 100))mb" ;;  # 20% RAM
+        local)
+            percent=2
+            maxmem_mb=$((ram * 1024 * percent / 100))
+            [ "$maxmem_mb" -lt 512 ] && maxmem_mb=512
+            ;;
+        dev)
+            percent=3
+            maxmem_mb=$((ram * 1024 * percent / 100))
+            [ "$maxmem_mb" -lt 1024 ] && maxmem_mb=1024
+            ;;
+        prod)
+            percent=5
+            maxmem_mb=$((ram * 1024 * percent / 100))
+            [ "$maxmem_mb" -lt 2048 ] && maxmem_mb=2048
+            ;;
     esac
+
+    # Format: use 'gb' for >= 1024mb, otherwise 'mb'
+    local maxmem
+    if [ "$maxmem_mb" -ge 1024 ]; then
+        maxmem="$((maxmem_mb / 1024))gb"
+    else
+        maxmem="${maxmem_mb}mb"
+    fi
 
     [ "$DRY_RUN" = true ] && { log_warning "[DRY RUN] $output"; return; }
 
@@ -289,12 +314,13 @@ generate_redis_config() {
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
 # ============================================================================
 
-# SECURITY - bind only to localhost in Docker network
-bind 127.0.0.1
-protected-mode yes
+# NETWORK - Docker containers need 0.0.0.0
+# Security is handled by Docker network isolation
+bind 0.0.0.0
+protected-mode no
 port 6379
 
-# Memory
+# Memory - ${maxmem} for ${ram}GB server (${percent}% of RAM)
 maxmemory ${maxmem}
 maxmemory-policy allkeys-lru
 maxmemory-samples 5
@@ -337,11 +363,11 @@ active-defrag-ignore-bytes 100mb
 active-defrag-threshold-lower 10
 active-defrag-threshold-upper 100
 
-# Databases
-databases $([[ "$env" == "prod" ]] && echo 16 || echo 1)
+# Databases - 16 for per-site isolation
+databases 16
 EOF
 
-    log_success "Redis: $output (SECURE)"
+    log_success "Redis: $output"
 }
 
 # ============================================================================
@@ -350,7 +376,7 @@ EOF
 
 generate_nginx_config() {
     local cpu=$1 ram=$2 env=$3
-    local output="$SCRIPT_DIR/docker/common/nginx/nginx.conf"
+    local output="$PROJECT_DIR/docker/common/nginx/nginx.conf"
 
     log_info "Генерация Nginx конфигурации..."
 
@@ -461,7 +487,7 @@ EOF
 
 generate_phpfpm_config() {
     local cpu=$1 ram=$2 env=$3
-    local output="$SCRIPT_DIR/docker/common/php/php-fpm.d/www.conf"
+    local output="$PROJECT_DIR/docker/common/php/php-fpm.d/www.conf"
 
     log_info "Генерация PHP-FPM конфигурации..."
 
@@ -472,7 +498,7 @@ generate_phpfpm_config() {
         local)
             max_children=$((cpu * 3))
             pm_mode="dynamic"
-            max_requests=200
+            max_requests=500    # Higher to reduce restart overhead (memory leaks rare in PHP 8.x)
             ;;
         dev)
             max_children=$((cpu * 4))
@@ -549,7 +575,7 @@ EOF
 
 generate_opcache_config() {
     local cpu=$1 ram=$2 env=$3
-    local output="$SCRIPT_DIR/docker/common/php/conf.d/opcache.ini"
+    local output="$PROJECT_DIR/docker/common/php/conf.d/opcache.ini"
 
     log_info "Генерация OPcache конфигурации..."
 
@@ -596,15 +622,33 @@ EOF
 
 generate_memcached_config() {
     local cpu=$1 ram=$2 env=$3
-    local output="$SCRIPT_DIR/config/memcached/memcached.conf"
+    local output="$PROJECT_DIR/config/memcached/memcached.conf"
 
     log_info "Генерация Memcached конфигурации..."
 
     local mem conn threads
+    # Memory: ~1% of RAM, minimum 256-512mb
     case "$env" in
-        local) mem=128;  conn=512;  threads=$cpu ;;
-        dev)   mem=256;  conn=1024; threads=$cpu ;;
-        prod)  mem=512;  conn=2048; threads=$((cpu * 2)) ;;
+        local)
+            mem=$((ram * 1024 / 100))  # 1% of RAM
+            [ "$mem" -lt 256 ] && mem=256
+            [ "$mem" -gt 512 ] && mem=512  # Cap at 512 for local
+            conn=512
+            threads=$cpu
+            ;;
+        dev)
+            mem=$((ram * 1024 / 100))  # 1% of RAM
+            [ "$mem" -lt 256 ] && mem=256
+            [ "$mem" -gt 1024 ] && mem=1024  # Cap at 1GB for dev
+            conn=1024
+            threads=$cpu
+            ;;
+        prod)
+            mem=$((ram * 1024 * 2 / 100))  # 2% of RAM
+            [ "$mem" -lt 512 ] && mem=512
+            conn=2048
+            threads=$((cpu * 2))
+            ;;
     esac
 
     [ "$DRY_RUN" = true ] && { log_warning "[DRY RUN] $output"; return; }
@@ -647,7 +691,7 @@ EOF
 
 update_env_file() {
     local cpu=$1 ram=$2 env=$3
-    local envfile="$SCRIPT_DIR/.env"
+    local envfile="$PROJECT_DIR/.env"
 
     if [ ! -f "$envfile" ]; then
         log_warning ".env не найден, пропуск обновления"

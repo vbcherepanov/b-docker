@@ -249,8 +249,8 @@ apply_database_config() {
 
     # Execute SQL using root credentials from .env
     if docker exec -i "$mysql_container" mysql \
-        -u"${MYSQL_ROOT_USER:-root}" \
-        -p"${MYSQL_ROOT_PASSWORD:-}" \
+        -u"${DB_ROOT_USER:-root}" \
+        -p"${DB_ROOT_PASSWORD:-}" \
         < "$sql_file" 2>/dev/null; then
         log "OK" "Database and user created for $domain"
     else

@@ -297,6 +297,7 @@ services:
       - ./volume/logs/mysql:/var/log/mysql
       - ./volume/mysql/dump:/dump
       - ./config/mysql/my.${ENVIRONMENT}.cnf:/etc/mysql/conf.d/bitrix.cnf:ro
+      - ./config/mysql/init:/docker-entrypoint-initdb.d:ro
 
     ports:
       - "${DB_PORT:-3306}:3306"
