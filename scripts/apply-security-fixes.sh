@@ -18,8 +18,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Base directory
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Base directory (project root, one level up from scripts/)
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$BASE_DIR"
 
 # Backup function
@@ -32,20 +32,24 @@ backup_file() {
 }
 
 echo "=== 1. FIXING .env.example ==="
-backup_file ".env.example"
+if [ -f ".env.example" ]; then
+    backup_file ".env.example"
 
-# Fix passwords in .env.example
-sed -i.bak \
-    -e 's/DB_PASSWORD=bitrix123/DB_PASSWORD=CHANGE_ME_GENERATE_SECURE_PASSWORD/' \
-    -e 's/DB_ROOT_PASSWORD=root123/DB_ROOT_PASSWORD=CHANGE_ME_GENERATE_SECURE_ROOT_PASSWORD/' \
-    -e 's/REDIS_PASSWORD=$/REDIS_PASSWORD=CHANGE_ME_GENERATE_SECURE_PASSWORD/' \
-    -e 's/RABBIT_COOKIE=SWQOKODSQALRPCLNMEQG/RABBIT_COOKIE=CHANGE_ME_GENERATE_WITH_openssl_rand_hex_20/' \
-    -e 's/RABBITMQ_DEFAULT_PASS=admin123/RABBITMQ_DEFAULT_PASS=CHANGE_ME_GENERATE_SECURE_PASSWORD/' \
-    -e 's/MONITORING_PASSWORD=changeme123/MONITORING_PASSWORD=CHANGE_ME_GENERATE_SECURE_PASSWORD/' \
-    -e 's/PORTAINER_AGENT_SECRET=myagentsecret/PORTAINER_AGENT_SECRET=CHANGE_ME_GENERATE_SECURE_SECRET/' \
-    .env.example
-rm -f .env.example.bak
-echo -e "${GREEN}[FIXED]${NC} .env.example - passwords replaced with secure placeholders"
+    # Fix passwords in .env.example
+    sed -i.bak \
+        -e 's/DB_PASSWORD=bitrix123/DB_PASSWORD=CHANGE_ME_GENERATE_SECURE_PASSWORD/' \
+        -e 's/DB_ROOT_PASSWORD=root123/DB_ROOT_PASSWORD=CHANGE_ME_GENERATE_SECURE_ROOT_PASSWORD/' \
+        -e 's/REDIS_PASSWORD=$/REDIS_PASSWORD=CHANGE_ME_GENERATE_SECURE_PASSWORD/' \
+        -e 's/RABBIT_COOKIE=SWQOKODSQALRPCLNMEQG/RABBIT_COOKIE=CHANGE_ME_GENERATE_WITH_openssl_rand_hex_20/' \
+        -e 's/RABBITMQ_DEFAULT_PASS=admin123/RABBITMQ_DEFAULT_PASS=CHANGE_ME_GENERATE_SECURE_PASSWORD/' \
+        -e 's/MONITORING_PASSWORD=changeme123/MONITORING_PASSWORD=CHANGE_ME_GENERATE_SECURE_PASSWORD/' \
+        -e 's/PORTAINER_AGENT_SECRET=myagentsecret/PORTAINER_AGENT_SECRET=CHANGE_ME_GENERATE_SECURE_SECRET/' \
+        .env.example
+    rm -f .env.example.bak
+    echo -e "${GREEN}[FIXED]${NC} .env.example - passwords replaced with secure placeholders"
+else
+    echo -e "${YELLOW}[SKIP]${NC} .env.example not found (production mode)"
+fi
 
 echo ""
 echo "=== 2. FIXING config/redis/redis.conf ==="
@@ -102,26 +106,34 @@ echo -e "${GREEN}[FIXED]${NC} config/redis/redis.conf - security + performance"
 
 echo ""
 echo "=== 3. FIXING config/backup/backup.sh ==="
-backup_file "config/backup/backup.sh"
+if [ -f "config/backup/backup.sh" ]; then
+    backup_file "config/backup/backup.sh"
 
-# Replace fallback passwords with required checks
-sed -i.bak \
-    -e 's/DB_PASSWORD=\${DB_PASSWORD:-bitrix123}/# Security: Require explicit password\nif [ -z "\${DB_PASSWORD:-}" ]; then echo "ERROR: DB_PASSWORD not set"; exit 1; fi\nDB_PASSWORD="\${DB_PASSWORD}"/' \
-    -e 's/DB_ROOT_PASSWORD=\${DB_ROOT_PASSWORD:-root123}/if [ -z "\${DB_ROOT_PASSWORD:-}" ]; then echo "ERROR: DB_ROOT_PASSWORD not set"; exit 1; fi\nDB_ROOT_PASSWORD="\${DB_ROOT_PASSWORD}"/' \
-    config/backup/backup.sh
-rm -f config/backup/backup.sh.bak
-echo -e "${GREEN}[FIXED]${NC} config/backup/backup.sh - removed fallback passwords"
+    # Replace fallback passwords with required checks
+    sed -i.bak \
+        -e 's/DB_PASSWORD=\${DB_PASSWORD:-bitrix123}/# Security: Require explicit password\nif [ -z "\${DB_PASSWORD:-}" ]; then echo "ERROR: DB_PASSWORD not set"; exit 1; fi\nDB_PASSWORD="\${DB_PASSWORD}"/' \
+        -e 's/DB_ROOT_PASSWORD=\${DB_ROOT_PASSWORD:-root123}/if [ -z "\${DB_ROOT_PASSWORD:-}" ]; then echo "ERROR: DB_ROOT_PASSWORD not set"; exit 1; fi\nDB_ROOT_PASSWORD="\${DB_ROOT_PASSWORD}"/' \
+        config/backup/backup.sh
+    rm -f config/backup/backup.sh.bak
+    echo -e "${GREEN}[FIXED]${NC} config/backup/backup.sh - removed fallback passwords"
+else
+    echo -e "${YELLOW}[SKIP]${NC} config/backup/backup.sh not found"
+fi
 
 echo ""
 echo "=== 4. FIXING docker/common/scripts/backup-manager.sh ==="
-backup_file "docker/common/scripts/backup-manager.sh"
+if [ -f "docker/common/scripts/backup-manager.sh" ]; then
+    backup_file "docker/common/scripts/backup-manager.sh"
 
-sed -i.bak \
-    -e 's/DB_PASSWORD=\${DB_PASSWORD:-bitrix123}/# Security: Require explicit password\nif [ -z "\${DB_PASSWORD:-}" ]; then echo "ERROR: DB_PASSWORD not set"; exit 1; fi\nDB_PASSWORD="\${DB_PASSWORD}"/' \
-    -e 's/DB_ROOT_PASSWORD=\${DB_ROOT_PASSWORD:-root123}/if [ -z "\${DB_ROOT_PASSWORD:-}" ]; then echo "ERROR: DB_ROOT_PASSWORD not set"; exit 1; fi\nDB_ROOT_PASSWORD="\${DB_ROOT_PASSWORD}"/' \
-    docker/common/scripts/backup-manager.sh
-rm -f docker/common/scripts/backup-manager.sh.bak
-echo -e "${GREEN}[FIXED]${NC} docker/common/scripts/backup-manager.sh - removed fallback passwords"
+    sed -i.bak \
+        -e 's/DB_PASSWORD=\${DB_PASSWORD:-bitrix123}/# Security: Require explicit password\nif [ -z "\${DB_PASSWORD:-}" ]; then echo "ERROR: DB_PASSWORD not set"; exit 1; fi\nDB_PASSWORD="\${DB_PASSWORD}"/' \
+        -e 's/DB_ROOT_PASSWORD=\${DB_ROOT_PASSWORD:-root123}/if [ -z "\${DB_ROOT_PASSWORD:-}" ]; then echo "ERROR: DB_ROOT_PASSWORD not set"; exit 1; fi\nDB_ROOT_PASSWORD="\${DB_ROOT_PASSWORD}"/' \
+        docker/common/scripts/backup-manager.sh
+    rm -f docker/common/scripts/backup-manager.sh.bak
+    echo -e "${GREEN}[FIXED]${NC} docker/common/scripts/backup-manager.sh - removed fallback passwords"
+else
+    echo -e "${YELLOW}[SKIP]${NC} docker/common/scripts/backup-manager.sh not found"
+fi
 
 echo ""
 echo "=== 5. FIXING docker/common/php/conf.d/opcache.ini ==="
@@ -290,31 +302,36 @@ echo -e "${GREEN}[FIXED]${NC} docker/common/nginx/nginx.conf - security + perfor
 
 echo ""
 echo "=== 7. FIXING docker-compose.bitrix.yml ==="
-backup_file "docker-compose.bitrix.yml"
+if [ -f "docker-compose.bitrix.yml" ]; then
+    backup_file "docker-compose.bitrix.yml"
 
-# Fix image versions (replace :latest with specific versions)
-sed -i.bak \
-    -e 's|grafana/grafana:latest|grafana/grafana:10.3.1|g' \
-    -e 's|prom/prometheus:latest|prom/prometheus:v2.49.1|g' \
-    -e 's|grafana/loki:latest|grafana/loki:2.9.4|g' \
-    -e 's|grafana/promtail:latest|grafana/promtail:2.9.4|g' \
-    docker-compose.bitrix.yml
+    # Fix image versions (replace :latest with specific versions)
+    sed -i.bak \
+        -e 's|grafana/grafana:latest|grafana/grafana:10.3.1|g' \
+        -e 's|prom/prometheus:latest|prom/prometheus:v2.49.1|g' \
+        -e 's|grafana/loki:latest|grafana/loki:2.9.4|g' \
+        -e 's|grafana/promtail:latest|grafana/promtail:2.9.4|g' \
+        docker-compose.bitrix.yml
 
-# Fix memcached root user
-sed -i.bak \
-    -e 's|memcached -u root|memcached|g' \
-    docker-compose.bitrix.yml
+    # Fix memcached root user
+    sed -i.bak \
+        -e 's|memcached -u root|memcached|g' \
+        docker-compose.bitrix.yml
 
-# Fix fail2ban privileged mode
-sed -i.bak \
-    -e 's|privileged: true|privileged: false|g' \
-    docker-compose.bitrix.yml
+    # Fix fail2ban privileged mode
+    sed -i.bak \
+        -e 's|privileged: true|privileged: false|g' \
+        docker-compose.bitrix.yml
 
-rm -f docker-compose.bitrix.yml.bak
-echo -e "${GREEN}[FIXED]${NC} docker-compose.bitrix.yml - image versions + security"
+    rm -f docker-compose.bitrix.yml.bak
+    echo -e "${GREEN}[FIXED]${NC} docker-compose.bitrix.yml - image versions + security"
+else
+    echo -e "${YELLOW}[SKIP]${NC} docker-compose.bitrix.yml not found"
+fi
 
 echo ""
 echo "=== 8. FIXING docker/common/nginx/snippets/ssl.conf ==="
+if [ -d "docker/common/nginx/snippets" ]; then
 backup_file "docker/common/nginx/snippets/ssl.conf"
 
 cat > docker/common/nginx/snippets/ssl.conf << 'SSL_EOF'
@@ -354,6 +371,9 @@ resolver 127.0.0.11 8.8.8.8 8.8.4.4 valid=300s;
 resolver_timeout 5s;
 SSL_EOF
 echo -e "${GREEN}[FIXED]${NC} docker/common/nginx/snippets/ssl.conf - modern TLS config"
+else
+    echo -e "${YELLOW}[SKIP]${NC} docker/common/nginx/snippets/ not found"
+fi
 
 echo ""
 echo "========================================"
