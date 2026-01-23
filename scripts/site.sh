@@ -319,7 +319,111 @@ generate_nginx_config() {
     # PHP-FPM upstream name (bitrix is our main container)
     local php_upstream="bitrix:9000"
 
-    cat > "$config_file" << NGINX
+    if [ "$with_ssl" = "true" ]; then
+        # SSL mode: HTTPS server + HTTP redirect
+        cat > "$config_file" << NGINX_SSL
+# ============================================================================
+# Site: $domain (SSL)
+# Generated: $(date '+%Y-%m-%d %H:%M:%S')
+# PHP: $php_version
+# ============================================================================
+
+# HTTPS Server
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $domain www.$domain;
+
+    root /home/$UGN/app/$domain/www;
+    index index.php index.html index.htm;
+
+    # SSL Certificates
+    ssl_certificate /etc/nginx/ssl/$domain/$domain.crt;
+    ssl_certificate_key /etc/nginx/ssl/$domain/$domain.key;
+
+    # SSL Settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # HSTS
+    add_header Strict-Transport-Security "max-age=63072000" always;
+
+    # Logging
+    access_log /var/log/nginx/${domain}.access.log main_json;
+    error_log /var/log/nginx/${domain}.error.log warn;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Gzip
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+    # Main location
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    # PHP processing
+    location ~ \.php\$ {
+        fastcgi_pass $php_upstream;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_read_timeout 600;
+        fastcgi_send_timeout 600;
+        fastcgi_buffer_size 64k;
+        fastcgi_buffers 4 64k;
+    }
+
+    # Bitrix specific
+    location ~* ^/bitrix/(modules|local_cache|stack_cache|managed_cache|cache)/ {
+        deny all;
+    }
+
+    location ~* ^/upload/1c_exchange/ {
+        deny all;
+    }
+
+    # Static files caching
+    location ~* \.(jpg|jpeg|gif|png|svg|ico|css|js|woff|woff2|ttf|eot)\$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Deny hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Health check
+    location = /health {
+        access_log off;
+        return 200 "OK";
+        add_header Content-Type text/plain;
+    }
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $domain www.$domain;
+    return 301 https://\$server_name\$request_uri;
+}
+NGINX_SSL
+    else
+        # HTTP-only mode
+        cat > "$config_file" << NGINX
 # ============================================================================
 # Site: $domain
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
@@ -335,7 +439,7 @@ server {
     index index.php index.html index.htm;
 
     # Logging
-    access_log /var/log/nginx/${domain}.access.log main;
+    access_log /var/log/nginx/${domain}.access.log main_json;
     error_log /var/log/nginx/${domain}.error.log warn;
 
     # Security headers
@@ -399,87 +503,6 @@ server {
     }
 }
 NGINX
-
-    # Add SSL server block if requested
-    if [ "$with_ssl" = "true" ]; then
-        cat >> "$config_file" << NGINX_SSL
-
-# HTTPS Server
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name $domain www.$domain;
-
-    root /home/$UGN/app/$domain/www;
-    index index.php index.html index.htm;
-
-    # SSL Certificates
-    ssl_certificate /etc/nginx/ssl/$domain/$domain.crt;
-    ssl_certificate_key /etc/nginx/ssl/$domain/$domain.key;
-
-    # SSL Settings
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 1d;
-    ssl_session_tickets off;
-
-    # HSTS
-    add_header Strict-Transport-Security "max-age=63072000" always;
-
-    # Logging
-    access_log /var/log/nginx/${domain}.access.log main;
-    error_log /var/log/nginx/${domain}.error.log warn;
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-
-    # Main location
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    # PHP processing
-    location ~ \.php\$ {
-        fastcgi_pass $php_upstream;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_read_timeout 600;
-        fastcgi_send_timeout 600;
-        fastcgi_buffer_size 64k;
-        fastcgi_buffers 4 64k;
-    }
-
-    # Bitrix specific
-    location ~* ^/bitrix/(modules|local_cache|stack_cache|managed_cache|cache)/ {
-        deny all;
-    }
-
-    # Static files
-    location ~* \.(jpg|jpeg|gif|png|svg|ico|css|js|woff|woff2|ttf|eot)\$ {
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-        access_log off;
-    }
-
-    # Deny hidden files
-    location ~ /\. {
-        deny all;
-    }
-}
-
-# Redirect HTTP to HTTPS
-server {
-    listen 80;
-    listen [::]:80;
-    server_name $domain www.$domain;
-    return 301 https://\$server_name\$request_uri;
-}
-NGINX_SSL
     fi
 
     log "OK" "Nginx config created: $config_file"
@@ -521,14 +544,22 @@ get_letsencrypt_cert() {
 
     log "INFO" "Requesting Let's Encrypt certificate for $domain..."
 
+    local container="${DOMAIN:-bitrix}_nginx"
+
+    # Skip if container is not running
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container}$"; then
+        log "WARN" "Nginx container not running, skip Let's Encrypt (run: make ssl-le SITE=$domain)"
+        return 0
+    fi
+
     # Check if certbot is available in nginx container
-    if ! docker exec "${DOMAIN:-bitrix}_nginx" which certbot >/dev/null 2>&1; then
+    if ! docker exec "$container" which certbot >/dev/null 2>&1; then
         log "ERROR" "Certbot not available. Set SSL=free in .env and rebuild nginx."
         return 1
     fi
 
     # Request certificate
-    docker exec "${DOMAIN:-bitrix}_nginx" certbot certonly \
+    docker exec "$container" certbot certonly \
         --nginx \
         --non-interactive \
         --agree-tos \
@@ -641,11 +672,15 @@ add_site() {
     # Check if site exists
     if [ -d "$WWW_DIR/$domain" ]; then
         log "WARN" "Site directory already exists: $WWW_DIR/$domain"
-        echo -n "Continue anyway? [y/N]: "
-        read -r confirm
-        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            log "INFO" "Aborted"
-            exit 0
+        if [ "${NO_CONFIRM:-}" != "true" ]; then
+            echo -n "Continue anyway? [y/N]: "
+            read -r confirm
+            if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                log "INFO" "Aborted"
+                exit 0
+            fi
+        else
+            log "INFO" "Continuing (--no-confirm mode)"
         fi
     fi
 
@@ -803,6 +838,12 @@ list_sites() {
 # Reload nginx configuration
 reload_nginx() {
     local container="${DOMAIN:-bitrix}_nginx"
+
+    # Skip if container is not running
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container}$"; then
+        log "INFO" "Nginx container not running, skip reload (will apply on next start)"
+        return 0
+    fi
 
     log "INFO" "Reloading nginx configuration..."
 

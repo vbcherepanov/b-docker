@@ -50,7 +50,7 @@ setup:
 init-main-site:
 	@echo "📁 Создание структуры основного сайта $(DOMAIN)..."
 	@chmod +x ./scripts/site.sh
-	@./scripts/site.sh add $(DOMAIN) $(if $(filter free,$(SSL)),--ssl=letsencrypt) $(if $(filter self,$(SSL)),--ssl)
+	@./scripts/site.sh add $(DOMAIN) --no-confirm $(if $(filter free,$(SSL)),--ssl=letsencrypt) $(if $(filter self,$(SSL)),--ssl)
 	@echo "✅ Структура и конфигурация созданы для $(DOMAIN)"
 
 # Полная инициализация с нуля (для первого запуска)
