@@ -241,21 +241,20 @@ apply_database_config() {
     # Check if MySQL container is running
     if ! docker ps --format '{{.Names}}' | grep -q "^${mysql_container}$"; then
         log "WARN" "MySQL container not running: $mysql_container"
-        log "INFO" "Database will be created when you run: make db-init-site SITE=$domain"
+        log "INFO" "Database will be created when you run: make db-init SITE=$domain"
         return 0
     fi
 
     log "INFO" "Creating database and user for $domain..."
 
-    # Execute SQL using root credentials from .env
-    if docker exec -i "$mysql_container" mysql \
-        -u"${DB_ROOT_USER:-root}" \
-        -p"${DB_ROOT_PASSWORD:-}" \
+    # Execute SQL using MYSQL_ROOT_PASSWORD from container environment
+    # This ensures we always use the password that matches the actual DB state
+    if docker exec -i "$mysql_container" bash -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD"' \
         < "$sql_file" 2>/dev/null; then
         log "OK" "Database and user created for $domain"
     else
         log "WARN" "Failed to create database (MySQL may not be ready yet)"
-        log "INFO" "Run manually: make db-init-site SITE=$domain"
+        log "INFO" "Run manually: make db-init SITE=$domain"
     fi
 }
 

@@ -63,9 +63,9 @@ first-run: setup docker-network-create init-main-site build-base
 	@sleep 30
 	@echo "🗄️  Инициализация базы данных для $(DOMAIN)..."
 	@if [ -f "config/sites/$(DOMAIN)/database-init.sql" ]; then \
-		docker exec -i $(DOMAIN)_mysql mysql -u root -p'$(DB_ROOT_PASSWORD)' < config/sites/$(DOMAIN)/database-init.sql && \
+		docker exec -i $(DOMAIN)_mysql bash -c 'mysql -uroot -p"$$MYSQL_ROOT_PASSWORD"' < config/sites/$(DOMAIN)/database-init.sql && \
 		echo "✅ База данных создана" || \
-		echo "⚠️  Ошибка создания БД (пароль изменился?). Выполни: make db-init SITE=$(DOMAIN)"; \
+		echo "⚠️  Ошибка создания БД. Выполни: make db-init SITE=$(DOMAIN)"; \
 	else \
 		echo "⚠️  config/sites/$(DOMAIN)/database-init.sql не найден, пропуск"; \
 	fi
@@ -102,15 +102,44 @@ first-run-prod: setup docker-network-create init-main-site build-base
 	@sleep 30
 	@echo "🗄️  Инициализация базы данных для $(DOMAIN)..."
 	@if [ -f "config/sites/$(DOMAIN)/database-init.sql" ]; then \
-		docker exec -i $(DOMAIN)_mysql mysql -u root -p'$(DB_ROOT_PASSWORD)' < config/sites/$(DOMAIN)/database-init.sql && \
+		docker exec -i $(DOMAIN)_mysql bash -c 'mysql -uroot -p"$$MYSQL_ROOT_PASSWORD"' < config/sites/$(DOMAIN)/database-init.sql && \
 		echo "✅ База данных создана" || \
-		echo "⚠️  Ошибка создания БД (пароль изменился?). Выполни: make db-init SITE=$(DOMAIN)"; \
+		echo "⚠️  Ошибка создания БД. Выполни: make db-init SITE=$(DOMAIN)"; \
 	else \
 		echo "⚠️  config/sites/$(DOMAIN)/database-init.sql не найден, пропуск"; \
 	fi
 	@$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx /usr/local/bin/script/main.sh || true
 	@echo ""
 	@echo "✅ Production запущен! Сайт: https://$(DOMAIN)/"
+
+# Инициализация БД для сайта (использовать: make db-init SITE=domain.com)
+SITE ?= $(DOMAIN)
+db-init:
+	@echo "🗄️  Инициализация базы данных для $(SITE)..."
+	@if [ ! -f "config/sites/$(SITE)/database-init.sql" ]; then \
+		echo "❌ Файл config/sites/$(SITE)/database-init.sql не найден"; \
+		echo "   Сначала создай сайт: ./scripts/site.sh add $(SITE)"; \
+		exit 1; \
+	fi
+	@docker exec -i $(DOMAIN)_mysql bash -c 'mysql -uroot -p"$$MYSQL_ROOT_PASSWORD"' \
+		< config/sites/$(SITE)/database-init.sql && \
+		echo "✅ База данных создана для $(SITE)" || \
+		(echo "❌ Ошибка. Проверь: docker compose -f docker-compose.bitrix.yml ps mysql"; exit 1)
+
+# Инициализация БД для ВСЕХ сайтов
+db-init-all:
+	@echo "🗄️  Инициализация баз данных для всех сайтов..."
+	@for sql_file in config/sites/*/database-init.sql; do \
+		if [ -f "$$sql_file" ]; then \
+			site=$$(basename $$(dirname "$$sql_file")); \
+			echo "  → $$site..."; \
+			docker exec -i $(DOMAIN)_mysql bash -c 'mysql -uroot -p"$$MYSQL_ROOT_PASSWORD"' \
+				< "$$sql_file" 2>/dev/null && \
+				echo "    ✅ OK" || \
+				echo "    ⚠️  Ошибка (возможно уже существует)"; \
+		fi; \
+	done
+	@echo "✅ Готово"
 
 # ============================================================================
 # ПРОСТЫЕ КОМАНДЫ ДЛЯ ЗАПУСКА ВСЕГО СТЕКА
