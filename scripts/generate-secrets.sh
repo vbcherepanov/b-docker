@@ -67,12 +67,63 @@ echo "PUSH_SECURITY_KEY=$PUSH_KEY"
 echo "PORTAINER_AGENT_SECRET=$PORTAINER_SECRET"
 echo ""
 
-# Ask to update .env
-echo "========================================"
-read -p "Update .env file with these values? (y/N) " -n 1 -r
-echo ""
+# Default/placeholder values that should be replaced
+DEFAULTS_PATTERN="bitrix123|root123|admin123|changeme123|myagentsecret|CHANGE_ME|SWQOKODSQALRPCLNMEQG"
 
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+# Check if a value is a default/placeholder (should be replaced)
+is_default_value() {
+    local value="$1"
+    [[ -z "$value" ]] && return 0  # empty = default
+    echo "$value" | grep -qiE "$DEFAULTS_PATTERN" && return 0
+    return 1
+}
+
+# Get current value from .env file
+get_env_value() {
+    local key="$1"
+    local file="$2"
+    grep "^${key}=" "$file" 2>/dev/null | head -1 | cut -d'=' -f2-
+}
+
+# Update only if current value is a default/placeholder
+safe_update_env() {
+    local key="$1"
+    local new_value="$2"
+    local file="$3"
+    local current_value
+    current_value=$(get_env_value "$key" "$file")
+
+    if is_default_value "$current_value"; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s|^${key}=.*|${key}=${new_value}|" "$file"
+        else
+            sed -i "s|^${key}=.*|${key}=${new_value}|" "$file"
+        fi
+        echo -e "  ${GREEN}✓${NC} $key — updated"
+    else
+        echo -e "  ${BLUE}•${NC} $key — already set (kept)"
+    fi
+}
+
+# Determine mode: --update-env = auto, otherwise interactive
+AUTO_MODE="false"
+if [[ "${1:-}" == "--update-env" ]]; then
+    AUTO_MODE="true"
+fi
+
+UPDATE_ENV="false"
+if [ "$AUTO_MODE" = "true" ]; then
+    UPDATE_ENV="true"
+else
+    echo "========================================"
+    read -p "Update .env file with these values? (y/N) " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        UPDATE_ENV="true"
+    fi
+fi
+
+if [ "$UPDATE_ENV" = "true" ]; then
     ENV_FILE=".env"
 
     if [ ! -f "$ENV_FILE" ]; then
@@ -87,32 +138,21 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 
     # Backup existing .env
     cp "$ENV_FILE" "${ENV_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
-    echo -e "${BLUE}Backup created${NC}"
-
-    # Update values using sed
-    # macOS compatible sed
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        SED_INPLACE="sed -i ''"
-    else
-        SED_INPLACE="sed -i"
-    fi
-
-    $SED_INPLACE "s|^DB_PASSWORD=.*|DB_PASSWORD=$DB_PASSWORD|" "$ENV_FILE"
-    $SED_INPLACE "s|^DB_ROOT_PASSWORD=.*|DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD|" "$ENV_FILE"
-    $SED_INPLACE "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$REDIS_PASSWORD|" "$ENV_FILE"
-    $SED_INPLACE "s|^RABBIT_COOKIE=.*|RABBIT_COOKIE=$RABBIT_COOKIE|" "$ENV_FILE"
-    $SED_INPLACE "s|^RABBITMQ_DEFAULT_PASS=.*|RABBITMQ_DEFAULT_PASS=$RABBITMQ_PASS|" "$ENV_FILE"
-    $SED_INPLACE "s|^MONITORING_PASSWORD=.*|MONITORING_PASSWORD=$MONITORING_PASS|" "$ENV_FILE"
-    $SED_INPLACE "s|^PUSH_SECURITY_KEY=.*|PUSH_SECURITY_KEY=$PUSH_KEY|" "$ENV_FILE"
-    $SED_INPLACE "s|^PORTAINER_AGENT_SECRET=.*|PORTAINER_AGENT_SECRET=$PORTAINER_SECRET|" "$ENV_FILE"
 
     echo ""
-    echo -e "${GREEN}SUCCESS!${NC} .env updated with secure passwords"
+    echo -e "${BLUE}Updating .env (only default/placeholder values):${NC}"
+
+    safe_update_env "DB_PASSWORD" "$DB_PASSWORD" "$ENV_FILE"
+    safe_update_env "DB_ROOT_PASSWORD" "$DB_ROOT_PASSWORD" "$ENV_FILE"
+    safe_update_env "REDIS_PASSWORD" "$REDIS_PASSWORD" "$ENV_FILE"
+    safe_update_env "RABBIT_COOKIE" "$RABBIT_COOKIE" "$ENV_FILE"
+    safe_update_env "RABBITMQ_DEFAULT_PASS" "$RABBITMQ_PASS" "$ENV_FILE"
+    safe_update_env "MONITORING_PASSWORD" "$MONITORING_PASS" "$ENV_FILE"
+    safe_update_env "PUSH_SECURITY_KEY" "$PUSH_KEY" "$ENV_FILE"
+    safe_update_env "PORTAINER_AGENT_SECRET" "$PORTAINER_SECRET" "$ENV_FILE"
+
     echo ""
-    echo "Next steps:"
-    echo "1. Validate: ./validate-env.sh"
-    echo "2. Rebuild:  docker compose build --no-cache"
-    echo "3. Restart:  docker compose down && docker compose up -d"
+    echo -e "${GREEN}Done!${NC} Passwords updated where needed."
 else
     echo ""
     echo "Copy the values above to your .env file manually"

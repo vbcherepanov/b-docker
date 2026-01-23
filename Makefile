@@ -64,7 +64,8 @@ first-run: setup docker-network-create init-main-site build-base
 	@echo "🗄️  Инициализация базы данных для $(DOMAIN)..."
 	@if [ -f "config/sites/$(DOMAIN)/database-init.sql" ]; then \
 		docker exec -i $(DOMAIN)_mysql mysql -u root -p'$(DB_ROOT_PASSWORD)' < config/sites/$(DOMAIN)/database-init.sql && \
-		echo "✅ База данных создана"; \
+		echo "✅ База данных создана" || \
+		echo "⚠️  Ошибка создания БД (пароль изменился?). Выполни: make db-init SITE=$(DOMAIN)"; \
 	else \
 		echo "⚠️  config/sites/$(DOMAIN)/database-init.sql не найден, пропуск"; \
 	fi
@@ -102,7 +103,8 @@ first-run-prod: setup docker-network-create init-main-site build-base
 	@echo "🗄️  Инициализация базы данных для $(DOMAIN)..."
 	@if [ -f "config/sites/$(DOMAIN)/database-init.sql" ]; then \
 		docker exec -i $(DOMAIN)_mysql mysql -u root -p'$(DB_ROOT_PASSWORD)' < config/sites/$(DOMAIN)/database-init.sql && \
-		echo "✅ База данных создана"; \
+		echo "✅ База данных создана" || \
+		echo "⚠️  Ошибка создания БД (пароль изменился?). Выполни: make db-init SITE=$(DOMAIN)"; \
 	else \
 		echo "⚠️  config/sites/$(DOMAIN)/database-init.sql не найден, пропуск"; \
 	fi

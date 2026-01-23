@@ -312,12 +312,23 @@ generate_nginx_config() {
     local domain="$1"
     local php_version="$2"
     local with_ssl="$3"
+    local ssl_type="${4:-self}"  # "self" or "letsencrypt"
     local config_file="$SITES_DIR/${domain}.conf"
 
     log "INFO" "Generating nginx config for $domain..."
 
     # PHP-FPM upstream name (bitrix is our main container)
     local php_upstream="bitrix:9000"
+
+    # SSL certificate paths
+    local ssl_cert ssl_key
+    if [ "$ssl_type" = "letsencrypt" ]; then
+        ssl_cert="/etc/letsencrypt/live/$domain/fullchain.pem"
+        ssl_key="/etc/letsencrypt/live/$domain/privkey.pem"
+    else
+        ssl_cert="/etc/nginx/ssl/$domain/$domain.crt"
+        ssl_key="/etc/nginx/ssl/$domain/$domain.key"
+    fi
 
     if [ "$with_ssl" = "true" ]; then
         # SSL mode: HTTPS server + HTTP redirect
@@ -338,8 +349,8 @@ server {
     index index.php index.html index.htm;
 
     # SSL Certificates
-    ssl_certificate /etc/nginx/ssl/$domain/$domain.crt;
-    ssl_certificate_key /etc/nginx/ssl/$domain/$domain.key;
+    ssl_certificate $ssl_cert;
+    ssl_certificate_key $ssl_key;
 
     # SSL Settings
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -696,21 +707,27 @@ add_site() {
     # Generate SSL if requested
     if [ "$with_ssl" = "true" ]; then
         if [ "$ssl_type" = "letsencrypt" ]; then
-            generate_nginx_config "$domain" "$php_version" "true"
-            # Let's Encrypt may fail if nginx isn't ready — non-fatal
-            if ! get_letsencrypt_cert "$domain"; then
-                log "WARN" "Let's Encrypt skipped. Run later: make ssl-le SITE=$domain"
+            # Step 1: Generate HTTP config first (needed for ACME challenge)
+            generate_nginx_config "$domain" "$php_version" "false"
+            reload_nginx || true
+
+            # Step 2: Try to get Let's Encrypt certificate
+            if get_letsencrypt_cert "$domain"; then
+                # Step 3: Upgrade to HTTPS config with LE cert paths
+                generate_nginx_config "$domain" "$php_version" "true" "letsencrypt"
+                reload_nginx || true
+            else
+                log "WARN" "Let's Encrypt skipped — HTTP config active. Run later: make ssl-le SITE=$domain"
             fi
         else
             generate_ssl_cert "$domain"
             generate_nginx_config "$domain" "$php_version" "true"
+            reload_nginx || log "WARN" "Nginx reload failed, will apply on next restart"
         fi
     else
         generate_nginx_config "$domain" "$php_version" "false"
+        reload_nginx || log "WARN" "Nginx reload failed, will apply on next restart"
     fi
-
-    # Reload nginx
-    reload_nginx
 
     echo ""
     echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
@@ -918,8 +935,13 @@ case "${1:-}" in
         ssl_site "${2:-}"
         ;;
     "ssl-le"|"letsencrypt")
-        generate_nginx_config "${2:-}" "$DEFAULT_PHP" "true"
+        # Generate HTTP config first for ACME challenge
+        generate_nginx_config "${2:-}" "$DEFAULT_PHP" "false"
+        reload_nginx || true
+        # Get certificate
         get_letsencrypt_cert "${2:-}"
+        # Upgrade to HTTPS config with LE paths
+        generate_nginx_config "${2:-}" "$DEFAULT_PHP" "true" "letsencrypt"
         reload_nginx
         ;;
     "reload")
