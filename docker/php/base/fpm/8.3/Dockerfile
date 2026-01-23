@@ -26,14 +26,14 @@ RUN apk add --no-cache \
     bash git tzdata msmtp wget imagemagick linux-headers ca-certificates su-exec fcgi \
     freetds freetype gettext gmp icu-libs imap libffi libintl libjpeg-turbo \
     libpng librdkafka libssh2 libstdc++ libtool libxpm libxslt libzip make \
-    rabbitmq-c unixodbc libmemcached-libs libldap yaml-dev lz4-libs zstd-libs antiword libwebp curl
+    rabbitmq-c unixodbc libmemcached-libs libldap lz4-libs zstd-libs antiword libwebp curl
 
 RUN apk add --no-cache --virtual .build-deps \
     autoconf bzip2-dev cmake curl-dev freetds-dev freetype-dev g++ gcc \
     imagemagick-dev gettext-dev gmp-dev icu-dev imap-dev krb5-dev \
     libmemcached-dev libc-dev libjpeg-turbo-dev libpng-dev librdkafka-dev \
     libssh2-dev libwebp-dev libxml2-dev libxpm-dev libxslt-dev libzip-dev \
-    openssl-dev pcre-dev pkgconf rabbitmq-c-dev yaml-dev zlib-dev \
+    openssl-dev pcre-dev pkgconf rabbitmq-c-dev zlib-dev \
     lz4-dev zstd-dev openldap-dev libwebp-dev
 
 # GD
@@ -48,8 +48,8 @@ RUN docker-php-ext-install -j$(nproc) \
 
 # Установка PECL-модулей, кроме memcached (он будет собираться отдельно)
 RUN pecl channel-update pecl.php.net && \
-    pecl install amqp apcu zstd msgpack mongodb redis rdkafka ssh2 yaml igbinary && \
-    docker-php-ext-enable amqp apcu zstd msgpack mongodb redis rdkafka ssh2 yaml igbinary
+    pecl install amqp apcu zstd msgpack mongodb redis rdkafka ssh2 igbinary && \
+    docker-php-ext-enable amqp apcu zstd msgpack mongodb redis rdkafka ssh2 igbinary
 
 # Сборка memcached с поддержкой igbinary
 RUN git clone https://github.com/php-memcached-dev/php-memcached.git /usr/src/php/ext/memcached && \
