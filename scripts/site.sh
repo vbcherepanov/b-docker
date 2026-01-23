@@ -222,6 +222,34 @@ EOF
     chmod 600 "$site_config_dir/msmtp.conf"
     log "OK" "Created: $site_config_dir/msmtp.conf"
 
+    # Create per-site crontab (empty template with examples)
+    cat > "$site_config_dir/crontab" << EOF
+# ============================================================================
+# PER-SITE CRONTAB: ${domain}
+# Generated: ${generated_date}
+# ============================================================================
+# These tasks run IN ADDITION to the base crontab (config/cron/crontab)
+# Base already handles: Bitrix agents, mail queue, log rotation
+#
+# Available paths:
+#   Document root: /home/bitrix/app/${domain}/www
+#   PHP binary:    /usr/local/bin/php
+#
+# Examples:
+#   # Import products every 2 hours
+#   0 */2 * * * /usr/local/bin/php /home/bitrix/app/${domain}/www/local/cron/import.php 2>&1 | logger -t ${db_name}-import
+#
+#   # Sync prices daily at 6:00
+#   0 6 * * * /usr/local/bin/php /home/bitrix/app/${domain}/www/local/cron/sync-prices.php 2>&1 | logger -t ${db_name}-sync
+#
+#   # Custom cleanup weekly (Sunday at 4:00)
+#   0 4 * * 0 /usr/local/bin/php /home/bitrix/app/${domain}/www/local/cron/cleanup.php 2>&1 | logger -t ${db_name}-cleanup
+# ============================================================================
+
+EOF
+
+    log "OK" "Created: $site_config_dir/crontab"
+
     log "OK" "Per-site configuration created for $domain"
 }
 

@@ -217,27 +217,48 @@ esac
 echo -e "${GREEN}  ✓ Version-specific settings configured${NC}"
 
 # ============================================================================
-# НАСТРОЙКА CRON
+# НАСТРОЙКА CRON (base + per-site crontabs)
 # ============================================================================
 echo -e "${YELLOW}[5/12] Configuring cron...${NC}"
 
 # NOTE: dcron in Alpine requires root crontab for reliable execution
-# Crontab is mounted to /etc/crontabs/root via docker-compose
-if [ -f "/etc/crontabs/root" ]; then
-    # Устанавливаем правильные права для root crontab
-    chmod 600 "/etc/crontabs/root"
-    chown root:root "/etc/crontabs/root"
+# Base crontab is mounted read-only to /etc/crontabs/root.base
+# Per-site crontabs are in /etc/bitrix-sites/{domain}/crontab
+# We merge them into /etc/crontabs/root at startup
 
-    # Проверяем содержимое
-    if [ -s "/etc/crontabs/root" ]; then
-        echo -e "${GREEN}  ✓ Root crontab configured${NC}"
-        CRON_TASKS=$(cat "/etc/crontabs/root" | grep -v "^#" | grep -v "^$" | grep -v "run-parts" | wc -l)
-        echo -e "${BLUE}  Active Bitrix tasks: ${CRON_TASKS}${NC}"
-    else
-        echo -e "${YELLOW}  ⚠ Crontab file is empty${NC}"
+CRONTAB_BASE="/etc/crontabs/root.base"
+CRONTAB_TARGET="/etc/crontabs/root"
+SITES_CRONTAB_DIR="/etc/bitrix-sites"
+
+if [ -f "$CRONTAB_BASE" ]; then
+    # Start with base crontab
+    cp "$CRONTAB_BASE" "$CRONTAB_TARGET"
+
+    # Append per-site crontabs
+    SITE_CRON_COUNT=0
+    if [ -d "$SITES_CRONTAB_DIR" ]; then
+        for site_crontab in "$SITES_CRONTAB_DIR"/*/crontab; do
+            if [ -f "$site_crontab" ] && [ -s "$site_crontab" ]; then
+                site_domain=$(basename "$(dirname "$site_crontab")")
+                echo "" >> "$CRONTAB_TARGET"
+                echo "# === PER-SITE CRON: $site_domain ===" >> "$CRONTAB_TARGET"
+                cat "$site_crontab" >> "$CRONTAB_TARGET"
+                SITE_CRON_COUNT=$((SITE_CRON_COUNT + 1))
+                echo -e "${BLUE}  + Added crontab for: $site_domain${NC}"
+            fi
+        done
     fi
+
+    # Set permissions
+    chmod 600 "$CRONTAB_TARGET"
+    chown root:root "$CRONTAB_TARGET"
+
+    # Summary
+    CRON_TASKS=$(grep -v "^#" "$CRONTAB_TARGET" | grep -v "^$" | grep -v "run-parts" | wc -l)
+    echo -e "${GREEN}  ✓ Crontab merged (base + ${SITE_CRON_COUNT} site crontabs)${NC}"
+    echo -e "${BLUE}  Active tasks: ${CRON_TASKS}${NC}"
 else
-    echo -e "${YELLOW}  ⚠ Root crontab file not found${NC}"
+    echo -e "${YELLOW}  ⚠ Base crontab not found at $CRONTAB_BASE${NC}"
 fi
 
 echo -e "${GREEN}  ✓ Cron configured${NC}"
