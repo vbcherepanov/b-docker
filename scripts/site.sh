@@ -697,7 +697,10 @@ add_site() {
     if [ "$with_ssl" = "true" ]; then
         if [ "$ssl_type" = "letsencrypt" ]; then
             generate_nginx_config "$domain" "$php_version" "true"
-            get_letsencrypt_cert "$domain"
+            # Let's Encrypt may fail if nginx isn't ready — non-fatal
+            if ! get_letsencrypt_cert "$domain"; then
+                log "WARN" "Let's Encrypt skipped. Run later: make ssl-le SITE=$domain"
+            fi
         else
             generate_ssl_cert "$domain"
             generate_nginx_config "$domain" "$php_version" "true"
