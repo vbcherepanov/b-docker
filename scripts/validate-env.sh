@@ -67,19 +67,19 @@ check_password() {
 
     if [ -z "$value" ]; then
         echo -e "${RED}[CRITICAL]${NC} $name is empty!"
-        ((ERRORS++))
+        ERRORS=$((ERRORS + 1))
         return
     fi
 
     if [ ${#value} -lt 16 ]; then
         echo -e "${YELLOW}[WARNING]${NC} $name is less than 16 characters (${#value} chars)"
-        ((WARNINGS++))
+        WARNINGS=$((WARNINGS + 1))
     fi
 
     for pattern in "${weak_patterns[@]}"; do
         if [[ "$value" == *"$pattern"* ]]; then
             echo -e "${RED}[CRITICAL]${NC} $name contains weak pattern '$pattern'"
-            ((ERRORS++))
+            ERRORS=$((ERRORS + 1))
             return
         fi
     done
@@ -99,10 +99,10 @@ check_env() {
     else
         if [ "$severity" == "CRITICAL" ]; then
             echo -e "${RED}[CRITICAL]${NC} $name should be '$expected', got '$actual'"
-            ((ERRORS++))
+            ERRORS=$((ERRORS + 1))
         else
             echo -e "${YELLOW}[WARNING]${NC} $name = $actual (recommended: $expected)"
-            ((WARNINGS++))
+            WARNINGS=$((WARNINGS + 1))
         fi
     fi
 }
@@ -131,32 +131,27 @@ if [ "$ENV" == "prod" ] || [ "$ENV" == "production" ]; then
     check_env "SSL" "free" "${SSL:-0}" "WARNING"
 
     # Check if ports are exposed (shouldn't be in production)
-    if [ "${DB_PORT:-3306}" != "" ]; then
-        echo -e "${YELLOW}[WARNING]${NC} DB_PORT is set - MySQL port will be exposed"
-        ((WARNINGS++))
+    if [ -n "${DB_PORT:-}" ]; then
+        echo -e "${YELLOW}[WARNING]${NC} DB_PORT is set ($DB_PORT) - MySQL port will be exposed"
+        WARNINGS=$((WARNINGS + 1))
     fi
 
-    if [ "${REDIS_PORT:-6379}" != "" ]; then
-        echo -e "${YELLOW}[WARNING]${NC} REDIS_PORT is set - Redis port will be exposed"
-        ((WARNINGS++))
+    if [ -n "${REDIS_PORT:-}" ]; then
+        echo -e "${YELLOW}[WARNING]${NC} REDIS_PORT is set ($REDIS_PORT) - Redis port will be exposed"
+        WARNINGS=$((WARNINGS + 1))
     fi
 else
     echo -e "${BLUE}[INFO]${NC} Non-production environment: $ENV"
     check_env "DEBUG" "1" "${DEBUG:-0}"
 fi
 
-# Check RABBIT_COOKIE format
+# Check RABBIT_COOKIE format (alphanumeric, 20+ chars)
 if [ -n "${RABBIT_COOKIE:-}" ]; then
-    if [[ ! "${RABBIT_COOKIE}" =~ ^[A-Z]+$ ]]; then
-        echo -e "${YELLOW}[WARNING]${NC} RABBIT_COOKIE should be uppercase letters only"
-        ((WARNINGS++))
+    if [ ${#RABBIT_COOKIE} -lt 20 ]; then
+        echo -e "${YELLOW}[WARNING]${NC} RABBIT_COOKIE is short (${#RABBIT_COOKIE} chars, recommended: 20+)"
+        WARNINGS=$((WARNINGS + 1))
     else
-        if [ ${#RABBIT_COOKIE} -lt 20 ]; then
-            echo -e "${YELLOW}[WARNING]${NC} RABBIT_COOKIE is short (${#RABBIT_COOKIE} chars, recommended: 20+)"
-            ((WARNINGS++))
-        else
-            echo -e "${GREEN}[OK]${NC} RABBIT_COOKIE format looks good"
-        fi
+        echo -e "${GREEN}[OK]${NC} RABBIT_COOKIE looks good (${#RABBIT_COOKIE} chars)"
     fi
 fi
 
@@ -164,7 +159,7 @@ fi
 if [ "${SSL:-0}" == "free" ]; then
     if [ -z "${LETSENCRYPT_EMAIL:-}" ] || [[ "${LETSENCRYPT_EMAIL}" == *"example"* ]]; then
         echo -e "${RED}[CRITICAL]${NC} LETSENCRYPT_EMAIL must be set for SSL=free"
-        ((ERRORS++))
+        ERRORS=$((ERRORS + 1))
     else
         echo -e "${GREEN}[OK]${NC} LETSENCRYPT_EMAIL is set"
     fi
