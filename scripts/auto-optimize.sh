@@ -752,6 +752,11 @@ update_env_file() {
     $sed_cmd "s/^MEMCACHED_MEMORY_LIMIT=.*/MEMCACHED_MEMORY_LIMIT=${memcached_mem}/" "$envfile"
     $sed_cmd "s/^MEMCACHED_THREADS=.*/MEMCACHED_THREADS=${cpu}/" "$envfile"
 
+    # Production: disable debug
+    if [ "$env" = "prod" ]; then
+        $sed_cmd "s/^DEBUG=.*/DEBUG=0/" "$envfile"
+    fi
+
     log_success ".env updated"
 }
 
