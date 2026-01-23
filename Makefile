@@ -46,16 +46,12 @@ setup:
 	@echo "║  Следующий шаг: make first-run                             ║"
 	@echo "╚════════════════════════════════════════════════════════════╝"
 
-# Инициализация основного сайта (мультисайтовая структура)
+# Инициализация основного сайта (мультисайтовая структура + per-site конфиг)
 init-main-site:
 	@echo "📁 Создание структуры основного сайта $(DOMAIN)..."
-	@mkdir -p www/$(DOMAIN)/www/bitrix/cache
-	@mkdir -p www/$(DOMAIN)/www/upload
-	@mkdir -p www/$(DOMAIN)/www/local
-	@if [ ! -f "www/$(DOMAIN)/www/index.php" ]; then \
-		echo '<?php echo "Site $(DOMAIN) is ready!"; phpinfo();' > www/$(DOMAIN)/www/index.php; \
-	fi
-	@echo "✅ Структура создана: www/$(DOMAIN)/www/"
+	@chmod +x ./scripts/site.sh
+	@./scripts/site.sh add $(DOMAIN) $(if $(filter free,$(SSL)),--ssl=letsencrypt) $(if $(filter self,$(SSL)),--ssl)
+	@echo "✅ Структура и конфигурация созданы для $(DOMAIN)"
 
 # Полная инициализация с нуля (для первого запуска)
 first-run: setup docker-network-create init-main-site build-base
@@ -63,10 +59,15 @@ first-run: setup docker-network-create init-main-site build-base
 	@echo "🏗️  Сборка и запуск контейнеров..."
 	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) build
 	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) up -d
-	@echo ""
-	@echo "⏳ Ожидание готовности MySQL (30 секунд)..."
+	@echo "⏳ Ожидание готовности MySQL..."
 	@sleep 30
-	@echo ""
+	@echo "🗄️  Инициализация базы данных для $(DOMAIN)..."
+	@if [ -f "config/sites/$(DOMAIN)/database-init.sql" ]; then \
+		docker exec -i $(DOMAIN)_mysql mysql -u root -p'$(DB_ROOT_PASSWORD)' < config/sites/$(DOMAIN)/database-init.sql && \
+		echo "✅ База данных создана"; \
+	else \
+		echo "⚠️  config/sites/$(DOMAIN)/database-init.sql не найден, пропуск"; \
+	fi
 	@echo "🔧 Настройка nginx..."
 	@$(DOCKER_COMPOSE) $(PROFILES_LOCAL) exec --user root nginx /usr/local/bin/script/main.sh || true
 	@echo ""
@@ -91,15 +92,23 @@ quick-start: docker-network-create build-base
 	@echo "✅ Контейнеры запущены. Статус: make local-ps"
 
 # Первый запуск для production
-first-run-prod: setup docker-network-create build-base
+first-run-prod: setup docker-network-create init-main-site build-base
 	@echo ""
 	@echo "🏗️  Сборка и запуск контейнеров (production)..."
 	$(DOCKER_COMPOSE) $(PROFILES_PROD) build
 	$(DOCKER_COMPOSE) $(PROFILES_PROD) up -d
+	@echo "⏳ Ожидание готовности MySQL..."
 	@sleep 30
+	@echo "🗄️  Инициализация базы данных для $(DOMAIN)..."
+	@if [ -f "config/sites/$(DOMAIN)/database-init.sql" ]; then \
+		docker exec -i $(DOMAIN)_mysql mysql -u root -p'$(DB_ROOT_PASSWORD)' < config/sites/$(DOMAIN)/database-init.sql && \
+		echo "✅ База данных создана"; \
+	else \
+		echo "⚠️  config/sites/$(DOMAIN)/database-init.sql не найден, пропуск"; \
+	fi
 	@$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx /usr/local/bin/script/main.sh || true
 	@echo ""
-	@echo "✅ Production запущен!"
+	@echo "✅ Production запущен! Сайт: https://$(DOMAIN)/"
 
 # ============================================================================
 # ПРОСТЫЕ КОМАНДЫ ДЛЯ ЗАПУСКА ВСЕГО СТЕКА
