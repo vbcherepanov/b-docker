@@ -28,5 +28,13 @@
 # Backups
 /backups/*
 
+# Generated configs (auto-optimize.sh creates per-server)
+/config/memcached/memcached.conf
+/config/mysql/my.conf
+/config/redis/redis.conf
+/docker/common/nginx/nginx.conf
+/docker/common/php/conf.d/opcache.ini
+/docker/common/php/php-fpm.d/www.conf
+
 # Local override
 docker-compose.override.yml
