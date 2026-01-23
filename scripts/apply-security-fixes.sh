@@ -358,9 +358,8 @@ add_header X-Content-Type-Options "nosniff" always;
 add_header X-XSS-Protection "1; mode=block" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-# DNS resolver for OCSP (Docker DNS + Google)
-resolver 127.0.0.11 8.8.8.8 8.8.4.4 valid=300s;
-resolver_timeout 5s;
+# DNS resolver for OCSP is defined in resolver.conf (included separately)
+# Do NOT add resolver here - it conflicts with resolver.conf in server blocks
 SSL_EOF
 echo -e "${GREEN}[FIXED]${NC} docker/common/nginx/snippets/ssl.conf - modern TLS config"
 else
