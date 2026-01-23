@@ -714,13 +714,17 @@ update_env_file() {
     [ "$min_spare" -lt 1 ] && min_spare=1
     local max_spare=$((max_children / 3))
 
-    # MySQL параметры
+    # MySQL параметры (in MB to avoid integer division issues)
     local mysql_buffer
+    local ram_mb=$((ram * 1024))
     case "$env" in
-        local) mysql_buffer="${ram}G" ;;
-        dev)   mysql_buffer="$((ram * 2))G" ;;
-        prod)  mysql_buffer="$((ram * 60 / 100))G" ;;
+        local) mysql_buffer="${ram_mb}M" ;;
+        dev)   mysql_buffer="$((ram_mb * 2))M" ;;
+        prod)  mysql_buffer="$((ram_mb * 60 / 100))M" ;;
     esac
+    # Minimum 128M for InnoDB
+    local buffer_val=${mysql_buffer%M}
+    [ "$buffer_val" -lt 128 ] && mysql_buffer="128M"
 
     # Memcached
     local memcached_mem
