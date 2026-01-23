@@ -313,15 +313,7 @@ if [ -f "docker-compose.bitrix.yml" ]; then
         -e 's|grafana/promtail:latest|grafana/promtail:2.9.4|g' \
         docker-compose.bitrix.yml
 
-    # Fix memcached root user
-    sed -i.bak \
-        -e 's|memcached -u root|memcached|g' \
-        docker-compose.bitrix.yml
-
-    # Fix fail2ban privileged mode
-    sed -i.bak \
-        -e 's|privileged: true|privileged: false|g' \
-        docker-compose.bitrix.yml
+    # Note: memcached -u root is required when container runs as root
 
     rm -f docker-compose.bitrix.yml.bak
     echo -e "${GREEN}[FIXED]${NC} docker-compose.bitrix.yml - image versions + security"
