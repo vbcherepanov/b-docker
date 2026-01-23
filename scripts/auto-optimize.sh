@@ -65,7 +65,7 @@ ${YELLOW}Примеры:${NC}
     $0 --cpu-cores 8 --ram-gb 32 --force
 
 ${YELLOW}Генерируемые конфигурации:${NC}
-    config/mysql/my.conf                    MySQL/MariaDB
+    config/mysql/my.{env}.cnf               MySQL/MariaDB
     config/redis/redis.conf                 Redis (с security!)
     config/memcached/memcached.conf         Memcached
     docker/common/nginx/nginx.conf          Nginx
@@ -124,7 +124,7 @@ detect_environment() {
 
 generate_mysql_config() {
     local cpu=$1 ram=$2 env=$3
-    local output="$PROJECT_DIR/config/mysql/my.conf"
+    local output="$PROJECT_DIR/config/mysql/my.${env}.cnf"
 
     log_info "Генерация MySQL конфигурации..."
 
@@ -782,7 +782,7 @@ print_report() {
     echo -e "  ${CYAN}Окружение:${NC}  ${GREEN}${env_upper}${NC}"
     echo ""
     echo -e "  ${CYAN}Сгенерированные конфиги:${NC}"
-    echo -e "    ${GREEN}✓${NC} config/mysql/my.conf"
+    echo -e "    ${GREEN}✓${NC} config/mysql/my.${env}.cnf"
     echo -e "    ${GREEN}✓${NC} config/redis/redis.conf"
     echo -e "    ${GREEN}✓${NC} config/memcached/memcached.conf"
     echo -e "    ${GREEN}✓${NC} docker/common/nginx/nginx.conf"

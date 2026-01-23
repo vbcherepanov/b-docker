@@ -30,7 +30,7 @@
 
 # Generated configs (auto-optimize.sh creates per-server)
 /config/memcached/memcached.conf
-/config/mysql/my.conf
+/config/mysql/my.*.cnf
 /config/redis/redis.conf
 /docker/common/nginx/nginx.conf
 /docker/common/php/conf.d/opcache.ini
