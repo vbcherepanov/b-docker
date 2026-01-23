@@ -250,6 +250,48 @@ EOF
 
     log "OK" "Created: $site_config_dir/crontab"
 
+    # Create per-site supervisor directory with example
+    mkdir -p "$site_config_dir/supervisor"
+    cat > "$site_config_dir/supervisor/.gitkeep" << 'EOF'
+EOF
+    cat > "$site_config_dir/supervisor/README" << EOF
+# ============================================================================
+# PER-SITE SUPERVISOR PROGRAMS: ${domain}
+# ============================================================================
+# Place .conf files here for long-running processes specific to this site.
+# They are loaded automatically at container startup.
+#
+# Example worker (${domain}-worker.conf):
+#
+#   [program:${db_name}-worker]
+#   command=/usr/local/bin/php /home/bitrix/app/${domain}/www/local/worker/queue.php
+#   user=bitrix
+#   numprocs=1
+#   autostart=true
+#   autorestart=true
+#   startsecs=5
+#   stopwaitsecs=30
+#   stdout_logfile=/var/log/supervisor/${db_name}-worker.log
+#   stderr_logfile=/var/log/supervisor/${db_name}-worker.err.log
+#
+# Example RabbitMQ consumer:
+#
+#   [program:${db_name}-consumer]
+#   command=/usr/local/bin/php /home/bitrix/app/${domain}/www/local/consumer/run.php
+#   user=bitrix
+#   numprocs=2
+#   process_name=%(program_name)s_%(process_num)02d
+#   autostart=true
+#   autorestart=true
+#   startsecs=10
+#   stopwaitsecs=60
+#   stdout_logfile=/var/log/supervisor/${db_name}-consumer-%(process_num)02d.log
+#   stderr_logfile=/var/log/supervisor/${db_name}-consumer-%(process_num)02d.err.log
+# ============================================================================
+EOF
+
+    log "OK" "Created: $site_config_dir/supervisor/"
+
     log "OK" "Per-site configuration created for $domain"
 }
 

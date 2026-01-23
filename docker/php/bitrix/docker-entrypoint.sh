@@ -264,6 +264,36 @@ fi
 echo -e "${GREEN}  ✓ Cron configured${NC}"
 
 # ============================================================================
+# НАСТРОЙКА SUPERVISOR (base + per-site workers)
+# ============================================================================
+echo -e "${YELLOW}[5.5/12] Loading per-site supervisor configs...${NC}"
+
+SUPERVISOR_CONF_DIR="/etc/supervisor/conf.d"
+SITE_CONF_COUNT=0
+
+if [ -d "$SITES_CRONTAB_DIR" ]; then
+    for site_sup_dir in "$SITES_CRONTAB_DIR"/*/supervisor; do
+        if [ -d "$site_sup_dir" ]; then
+            site_domain=$(basename "$(dirname "$site_sup_dir")")
+            for conf_file in "$site_sup_dir"/*.conf; do
+                if [ -f "$conf_file" ]; then
+                    conf_name="${site_domain}_$(basename "$conf_file")"
+                    cp "$conf_file" "$SUPERVISOR_CONF_DIR/$conf_name"
+                    SITE_CONF_COUNT=$((SITE_CONF_COUNT + 1))
+                    echo -e "${BLUE}  + $site_domain: $(basename "$conf_file")${NC}"
+                fi
+            done
+        fi
+    done
+fi
+
+if [ $SITE_CONF_COUNT -gt 0 ]; then
+    echo -e "${GREEN}  ✓ Loaded ${SITE_CONF_COUNT} per-site supervisor configs${NC}"
+else
+    echo -e "${YELLOW}  ⚠ No per-site supervisor configs found${NC}"
+fi
+
+# ============================================================================
 # НАСТРОЙКА MSMTP (для отправки почты)
 # ============================================================================
 echo -e "${YELLOW}[6/12] Configuring msmtp...${NC}"
