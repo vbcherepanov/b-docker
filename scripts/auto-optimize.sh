@@ -126,7 +126,17 @@ generate_mysql_config() {
     local cpu=$1 ram=$2 env=$3
     local output="$PROJECT_DIR/config/mysql/my.${env}.cnf"
 
-    log_info "Генерация MySQL конфигурации..."
+    # Detect DB type from MYSQL_IMAGE
+    local mysql_image=""
+    local db_type="mysql"
+    if [ -f "$PROJECT_DIR/.env" ]; then
+        mysql_image=$(grep -E "^MYSQL_IMAGE=" "$PROJECT_DIR/.env" 2>/dev/null | cut -d'=' -f2 || echo "")
+    fi
+    if echo "$mysql_image" | grep -qi "mariadb"; then
+        db_type="mariadb"
+    fi
+
+    log_info "Генерация конфигурации для ${db_type} (${mysql_image:-default})..."
 
     # Расчёт параметров
     local buffer_pool max_conn thread_cache table_cache
@@ -151,7 +161,7 @@ generate_mysql_config() {
             slow_time=2
             ;;
         prod)
-            buffer_pool=$((ram * 1024 * 60 / 100))  # 60% RAM for prod
+            buffer_pool=$((ram * 1024 * 60 / 100))  # 60% RAM in MB for prod
             max_conn=$((cpu * 50))
             [ "$max_conn" -lt 200 ] && max_conn=200
             flush_commit=1                       # Safe writes
@@ -167,11 +177,13 @@ generate_mysql_config() {
 
     thread_cache=$((cpu * 4))
     table_cache=$((max_conn * 2))
-    local redo_log=$((buffer_pool / 4))
-    [ "$redo_log" -lt 256 ] && redo_log=256
-    [ "$redo_log" -gt 2048 ] && redo_log=2048
-    local redo_bytes=$((redo_log * 1024 * 1024))
 
+    # Redo log / log file size calculation
+    local log_size_mb=$((buffer_pool / 4))
+    [ "$log_size_mb" -lt 256 ] && log_size_mb=256
+    [ "$log_size_mb" -gt 2048 ] && log_size_mb=2048
+
+    # Buffer pool instances (MySQL only, removed in MariaDB 10.11)
     local instances=$((buffer_pool / 1024))
     [ "$instances" -lt 1 ] && instances=1
     [ "$instances" -gt 64 ] && instances=64
@@ -183,10 +195,23 @@ generate_mysql_config() {
 
     mkdir -p "$(dirname "$output")"
 
+    # InnoDB log/redo config differs between MySQL and MariaDB
+    local innodb_log_config=""
+    local innodb_pool_instances=""
+    if [ "$db_type" = "mariadb" ]; then
+        # MariaDB: innodb_log_file_size (in M), no innodb_buffer_pool_instances in 10.11+
+        innodb_log_config="innodb_log_file_size = ${log_size_mb}M"
+    else
+        # MySQL 8.0+: innodb_redo_log_capacity (in bytes), innodb_buffer_pool_instances
+        local redo_bytes=$((log_size_mb * 1024 * 1024))
+        innodb_log_config="innodb_redo_log_capacity = ${redo_bytes}"
+        innodb_pool_instances="innodb_buffer_pool_instances = ${instances}"
+    fi
+
     cat > "$output" << EOF
 # ============================================================================
-# MySQL/MariaDB Configuration - AUTO OPTIMIZED
-# Server: ${cpu} CPU, ${ram}GB RAM | Environment: ${env}
+# ${db_type^} Configuration - AUTO OPTIMIZED
+# Image: ${mysql_image:-default} | Server: ${cpu} CPU, ${ram}GB RAM | Env: ${env}
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
 # ============================================================================
 
@@ -205,10 +230,10 @@ init-connect = "SET NAMES utf8mb4"
 innodb_strict_mode = OFF
 innodb_file_per_table = 1
 innodb_buffer_pool_size = ${buffer_pool}M
-innodb_buffer_pool_instances = ${instances}
-innodb_flush_method = O_DIRECT
+${innodb_pool_instances:+${innodb_pool_instances}
+}innodb_flush_method = O_DIRECT
 innodb_flush_log_at_trx_commit = ${flush_commit}
-innodb_redo_log_capacity = ${redo_bytes}
+${innodb_log_config}
 innodb_log_buffer_size = 64M
 innodb_lock_wait_timeout = $([[ "$env" == "prod" ]] && echo 50 || echo 120)
 innodb_io_capacity = ${io_capacity}
@@ -261,7 +286,7 @@ max_allowed_packet = 256M
 default-character-set = utf8mb4
 EOF
 
-    log_success "MySQL: $output"
+    log_success "${db_type^}: $output (buffer_pool=${buffer_pool}M, log=${log_size_mb}M)"
 }
 
 # ============================================================================
