@@ -11,6 +11,7 @@ UID ?= $(shell id -u)
 GID ?= $(shell id -g)
 UGN ?=bitrix
 NETWORK_NAME ?=${DOMAIN}_network
+DOCKER_SUBNET ?=172.20.0.0/16
 
 .PHONY: reload-cron up init down build docker-build docker-up docker-down-clear test init composer-install cli cron-agent tests-run init-system create-unit-test create_dump monitoring-up monitoring-down portainer-up portainer-down backup-db backup-files backup-full set-local set-dev set-prod ssl-generate logs-nginx logs-php status clean-volumes clean-images clean-all disk-usage setup first-run quick-start
 
@@ -198,7 +199,7 @@ build-base-fpm:
 docker-network-create:
 	@if ! docker network inspect $(NETWORK_NAME) >/dev/null 2>&1; then \
 		echo "Creating external network '$(NETWORK_NAME)'..."; \
-		docker network create $(NETWORK_NAME); \
+		docker network create --driver bridge --subnet $(DOCKER_SUBNET) $(NETWORK_NAME); \
 	else \
 		echo "Network '$(NETWORK_NAME)' already exists."; \
 	fi

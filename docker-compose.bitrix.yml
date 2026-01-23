@@ -986,10 +986,7 @@ services:
 networks:
   bitrix-network:
     name: ${DOMAIN}_network
-    driver: bridge
-    ipam:
-      config:
-        - subnet: ${DOCKER_SUBNET:-172.20.0.0/16}
+    external: true
 
 # ============================================================================
 # VOLUMES
