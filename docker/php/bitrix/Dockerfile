@@ -100,6 +100,7 @@ RUN mkdir -p \
     "/var/log/supervisor" \
     "/var/log/bitrix" \
     "/var/log/msmtp" \
+    "/var/lib/msmtp/sites" \
     "/var/run/supervisor" \
     "/etc/supervisor/conf.d" \
     "/etc/crontabs" \
@@ -122,6 +123,7 @@ RUN chown -R "${UGN}:${UGN}" \
     "/var/log/supervisor" \
     "/var/log/bitrix" \
     "/var/log/msmtp" \
+    "/var/lib/msmtp/sites" \
     "/var/run/supervisor" \
     "/etc/crontabs/${UGN}" \
     "/var/lib/php/sessions" \

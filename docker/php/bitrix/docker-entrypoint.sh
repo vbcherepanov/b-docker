@@ -298,14 +298,86 @@ fi
 # ============================================================================
 echo -e "${YELLOW}[6/12] Configuring msmtp...${NC}"
 
-if [ -f "/etc/msmtprc" ]; then
-    # msmtp требует чтобы конфиг с паролем принадлежал запускающему пользователю
-    chown "${UGN}:${UGN}" /etc/msmtprc 2>/dev/null || true
-    chmod 600 /etc/msmtprc 2>/dev/null || true
-    echo -e "${GREEN}  ✓ msmtp configured for user ${UGN}${NC}"
-else
-    echo -e "${YELLOW}  ⚠ msmtprc not found, mail may not work${NC}"
+# Remove stale /etc/msmtprc if it's a directory (Docker creates dir when bind source missing)
+if [ -d "/etc/msmtprc" ]; then
+    rm -rf /etc/msmtprc
+    echo -e "${YELLOW}  ⚠ Removed stale /etc/msmtprc directory${NC}"
 fi
+
+# Generate fallback /etc/msmtprc based on environment
+if [ "${ENVIRONMENT}" = "local" ] || [ "${ENVIRONMENT}" = "dev" ]; then
+    # Development: use mailhog
+    cat > /etc/msmtprc <<MSMTP_EOF
+# Auto-generated fallback msmtp config (${ENVIRONMENT})
+defaults
+logfile -
+syslog on
+
+account mailhog
+host mailhog
+port 1025
+from noreply@${DOMAIN}
+auth off
+tls off
+
+account default : mailhog
+MSMTP_EOF
+    echo -e "${GREEN}  ✓ Generated fallback msmtp config (mailhog)${NC}"
+else
+    # Production: minimal config that logs errors
+    cat > /etc/msmtprc <<MSMTP_EOF
+# Auto-generated fallback msmtp config (${ENVIRONMENT})
+# NOTE: For production, configure per-site SMTP in /etc/bitrix-sites/{domain}/msmtp.conf
+defaults
+logfile /var/log/msmtp/default.log
+syslog on
+
+account default
+host localhost
+port 25
+from noreply@${DOMAIN}
+auth off
+tls off
+MSMTP_EOF
+    echo -e "${YELLOW}  ⚠ Generated minimal fallback msmtp config (configure per-site SMTP!)${NC}"
+fi
+
+# Set ownership for msmtp (requires file owned by calling user)
+chown "${UGN}:${UGN}" /etc/msmtprc
+chmod 600 /etc/msmtprc
+
+# Copy per-site msmtp configs to writable location with correct permissions
+# (sites-config is mounted :ro, so we copy to /var/lib/msmtp/sites/)
+SITES_CONFIG="/etc/bitrix-sites"
+MSMTP_RUNTIME_DIR="/var/lib/msmtp/sites"
+MSMTP_SITE_COUNT=0
+
+mkdir -p "$MSMTP_RUNTIME_DIR"
+
+if [ -d "$SITES_CONFIG" ]; then
+    for site_msmtp in "$SITES_CONFIG"/*/msmtp.conf; do
+        if [ -f "$site_msmtp" ]; then
+            site_name=$(basename "$(dirname "$site_msmtp")")
+            dest_dir="$MSMTP_RUNTIME_DIR/$site_name"
+            mkdir -p "$dest_dir"
+            cp "$site_msmtp" "$dest_dir/msmtp.conf"
+            chown "${UGN}:${UGN}" "$dest_dir/msmtp.conf"
+            chmod 600 "$dest_dir/msmtp.conf"
+            MSMTP_SITE_COUNT=$((MSMTP_SITE_COUNT + 1))
+            echo -e "${BLUE}  + Per-site SMTP: $site_name${NC}"
+        fi
+    done
+fi
+
+if [ $MSMTP_SITE_COUNT -gt 0 ]; then
+    echo -e "${GREEN}  ✓ Prepared ${MSMTP_SITE_COUNT} per-site msmtp configs${NC}"
+else
+    echo -e "${YELLOW}  ⚠ No per-site msmtp configs found in $SITES_CONFIG${NC}"
+fi
+
+# Ensure msmtp log directory is writable
+mkdir -p /var/log/msmtp
+chown -R "${UGN}:${UGN}" /var/log/msmtp 2>/dev/null || true
 
 # ============================================================================
 # ПРОВЕРКА ПОДКЛЮЧЕНИЯ К БАЗЕ ДАННЫХ

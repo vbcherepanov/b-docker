@@ -21,7 +21,8 @@ x-volumes:
     target: /home/${UGN}/app
 
   # Конфигурационные файлы
-  msmtp: &msmtp ./config/msmtp/msmtprc:/etc/msmtprc
+  # NOTE: msmtp config is generated dynamically in entrypoint based on ENVIRONMENT
+  # Per-site SMTP configs are in ./config/sites/{domain}/msmtp.conf
   # NOTE: dcron in Alpine requires root crontab for reliable execution
   # Base crontab is read-only; entrypoint merges it with per-site crontabs
   crontab: &crontab ./config/cron/crontab:/etc/crontabs/root.base:ro
@@ -140,7 +141,6 @@ services:
       # Основной код приложения (мультисайт: www/${DOMAIN}/www/)
       - *app-code
       # Конфигурации
-      - *msmtp
       - *crontab
       - *sites-config
       # Логи

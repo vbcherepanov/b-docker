@@ -182,8 +182,7 @@ EOF
     # Create msmtp.conf
     local smtp_user_line=""
     local smtp_password_line=""
-    local smtp_tls_line="tls off"
-    local smtp_starttls_line="tls_starttls off"
+    local smtp_tls_block=""
 
     if [ -n "$smtp_user" ]; then
         smtp_user_line="user $smtp_user"
@@ -192,8 +191,11 @@ EOF
         smtp_password_line="password $smtp_password"
     fi
     if [ "$smtp_tls" = "on" ]; then
-        smtp_tls_line="tls on"
-        smtp_starttls_line="tls_starttls on"
+        smtp_tls_block="tls on
+tls_starttls on
+tls_certcheck on"
+    else
+        smtp_tls_block="tls off"
     fi
 
     cat > "$site_config_dir/msmtp.conf" << EOF
@@ -203,7 +205,10 @@ EOF
 # ============================================================================
 # This file is used by sendmail-wrapper.sh for per-site email routing
 
-# Account for this site
+defaults
+logfile /var/log/msmtp/${domain}.log
+syslog on
+
 account ${db_name}
 host ${smtp_host}
 port ${smtp_port}
@@ -211,11 +216,8 @@ from ${smtp_from}
 auth ${smtp_auth}
 ${smtp_user_line}
 ${smtp_password_line}
-${smtp_tls_line}
-${smtp_starttls_line}
-logfile /var/log/msmtp/${domain}.log
+${smtp_tls_block}
 
-# Set as default for this config
 account default : ${db_name}
 EOF
 
