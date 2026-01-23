@@ -452,25 +452,41 @@ if [ -n "$NGINX_IP" ]; then
 fi
 
 # ============================================================================
-# АВТОГЕНЕРАЦИЯ session.cookie_secure НА ОСНОВЕ SSL
+# АВТОГЕНЕРАЦИЯ PHP НАСТРОЕК НА ОСНОВЕ ENVIRONMENT И SSL
 # ============================================================================
-echo -e "${YELLOW}[12/13] Configuring session.cookie_secure...${NC}"
+echo -e "${YELLOW}[12/13] Configuring environment-specific PHP settings...${NC}"
 
-SESSION_SECURE="Off"
-if [ "$SSL" = "1" ] || [ "$SSL" = "2" ]; then
-    SESSION_SECURE="On"
-    echo -e "${GREEN}  ✓ SSL enabled (SSL=$SSL), setting session.cookie_secure=On${NC}"
+# --- display_errors ---
+DISPLAY_ERRORS="Off"
+if [ "${ENVIRONMENT}" != "prod" ] && [ "${ENVIRONMENT}" != "production" ]; then
+    DISPLAY_ERRORS="On"
+    echo -e "${GREEN}  ✓ Development mode: display_errors=On${NC}"
 else
-    echo -e "${YELLOW}  ⚠ SSL disabled (SSL=$SSL), setting session.cookie_secure=Off${NC}"
+    echo -e "${BLUE}  Production mode: display_errors=Off${NC}"
 fi
 
-# Создаем конфиг файл с правильным значением
-cat > /usr/local/etc/php/conf.d/99-session-security.ini <<EOF
-; Auto-generated session security settings based on SSL=${SSL}
+# --- session.cookie_secure ---
+SESSION_SECURE="Off"
+if [ "$SSL" = "free" ] || [ "$SSL" = "self" ]; then
+    SESSION_SECURE="On"
+    echo -e "${GREEN}  ✓ SSL enabled (SSL=$SSL), session.cookie_secure=On${NC}"
+else
+    echo -e "${YELLOW}  ⚠ SSL disabled (SSL=$SSL), session.cookie_secure=Off${NC}"
+fi
+
+# Generate runtime PHP config
+cat > /usr/local/etc/php/conf.d/99-runtime.ini <<EOF
+; Auto-generated at container startup
+; Environment: ${ENVIRONMENT}, SSL: ${SSL}
+
+; Error display (Off in production, On in development)
+display_errors = ${DISPLAY_ERRORS}
+
+; Session security
 session.cookie_secure = ${SESSION_SECURE}
 EOF
 
-echo -e "${GREEN}  ✓ Session security configured: session.cookie_secure=${SESSION_SECURE}${NC}"
+echo -e "${GREEN}  ✓ Runtime PHP config generated${NC}"
 
 # ============================================================================
 # ДОБАВЛЕНИЕ ВНУТРЕННЕГО SSL СЕРТИФИКАТА В ДОВЕРЕННЫЕ
