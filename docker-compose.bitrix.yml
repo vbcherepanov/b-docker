@@ -292,6 +292,7 @@ services:
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USERNAME}
       MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_EXPORTER_PASSWORD: ${MYSQL_EXPORTER_PASSWORD:-exporter_password}
 
     volumes:
       - mysql-data:/var/lib/mysql
@@ -300,8 +301,10 @@ services:
       - ./config/mysql/my.${ENVIRONMENT}.cnf:/etc/mysql/conf.d/bitrix.cnf:ro
       - ./config/mysql/init:/docker-entrypoint-initdb.d:ro
 
-    ports:
-      - "${DB_PORT:-3306}:3306"
+    # SECURITY: Port closed for production - MySQL only accessible within Docker network
+    # Uncomment for development/debugging only:
+    # ports:
+    #   - "${DB_PORT:-3306}:3306"
 
     networks:
       - bitrix-network
@@ -845,7 +848,7 @@ services:
     image: prom/mysqld-exporter:v0.15.1
 
     environment:
-      - MYSQLD_EXPORTER_PASSWORD=${DB_PASSWORD}
+      - MYSQLD_EXPORTER_PASSWORD=${MYSQL_EXPORTER_PASSWORD:-exporter_password}
 
     command:
       - "--mysqld.address=mysql:3306"
