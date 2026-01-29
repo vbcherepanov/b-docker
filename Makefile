@@ -110,7 +110,29 @@ first-run-prod: setup docker-network-create init-main-site build-base
 	fi
 	@$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx /usr/local/bin/script/main.sh || true
 	@echo ""
-	@echo "✅ Production запущен! Сайт: https://$(DOMAIN)/"
+	@echo "🔄 Установка автозапуска (systemd)..."
+	@if [ "$$(id -u)" = "0" ]; then \
+		./scripts/install-service.sh install --yes; \
+	else \
+		echo "⚠️  Для установки автозапуска нужны права root"; \
+		echo "   Выполни: sudo make install-service"; \
+	fi
+	@echo "🧹 Настройка автоочистки Docker..."
+	@if [ "$$(id -u)" = "0" ]; then \
+		./scripts/docker-cleanup.sh --setup-cron 2>/dev/null || true; \
+	fi
+	@echo ""
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║  🎉 PRODUCTION ЗАПУЩЕН!                                    ║"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo ""
+	@echo "  🌐 Сайт: https://$(DOMAIN)/"
+	@echo ""
+	@echo "  📋 Следующие шаги:"
+	@echo "    1. Установить Bitrix: https://$(DOMAIN)/bitrixsetup.php"
+	@echo "    2. Если автозапуск не установился:"
+	@echo "       sudo make install-service"
+	@echo ""
 
 # Инициализация БД для сайта (использовать: make db-init SITE=domain.com)
 SITE ?= $(DOMAIN)
@@ -471,7 +493,35 @@ status-local:
 status:
 	$(DOCKER_COMPOSE) ps
 
-# Команды для очистки
+# ==========================================
+# 🧹 ОЧИСТКА DOCKER (ЭКОНОМИЯ ДИСКА)
+# ==========================================
+
+# Показать использование диска Docker
+docker-status:
+	@./scripts/docker-cleanup.sh --status
+
+# Мягкая очистка (безопасно, только dangling)
+docker-clean:
+	@./scripts/docker-cleanup.sh --soft
+
+# Полная очистка (все неиспользуемые images)
+docker-clean-full:
+	@./scripts/docker-cleanup.sh --full
+
+# Агрессивная очистка (включая build cache) — ОСТОРОЖНО!
+docker-clean-aggressive:
+	@./scripts/docker-cleanup.sh --aggressive
+
+# Настроить еженедельную очистку через cron
+docker-clean-cron:
+	@sudo ./scripts/docker-cleanup.sh --setup-cron
+
+# Показать рекомендуемый daemon.json
+docker-daemon-config:
+	@./scripts/docker-cleanup.sh --daemon-config
+
+# Старые команды (для совместимости)
 clean-volumes:
 	docker volume prune -f
 clean-images:
@@ -483,6 +533,45 @@ clean-all:
 disk-usage:
 	df -h
 	docker system df
+
+# ==========================================
+# 📜 УПРАВЛЕНИЕ ЛОГАМИ
+# ==========================================
+
+# Показать статус логов (размер, количество файлов)
+logs-status:
+	@./scripts/logs-rotate.sh --status
+
+# Ротация логов (сжатие старых)
+logs-rotate:
+	@./scripts/logs-rotate.sh --rotate
+
+# Принудительная ротация
+logs-rotate-force:
+	@./scripts/logs-rotate.sh --rotate --force
+
+# Удалить старые логи (по умолчанию старше 30 дней)
+# Использование: make logs-cleanup
+#               make logs-cleanup RETENTION_DAYS=7
+logs-cleanup:
+	@RETENTION_DAYS=$(RETENTION_DAYS) ./scripts/logs-rotate.sh --cleanup
+
+# Полная очистка логов (ротация + удаление старых)
+logs-maintain:
+	@./scripts/logs-rotate.sh --rotate
+	@./scripts/logs-rotate.sh --cleanup
+
+# Настроить автоматическую ротацию через cron
+logs-setup-cron:
+	@./scripts/logs-rotate.sh --setup-cron
+
+# Очистить ВСЕ логи (осторожно!)
+logs-clear-all:
+	@echo "⚠️  ВНИМАНИЕ: Будут удалены ВСЕ логи!"
+	@read -p "Продолжить? [y/N]: " confirm && [ "$$confirm" = "y" ] || exit 0
+	@find ./volume/logs -type f -name "*.log*" -delete 2>/dev/null || true
+	@find ./volume/logs -type f -name "*.gz" -delete 2>/dev/null || true
+	@echo "✅ Все логи удалены"
 
 # ==========================================
 # 💾 СИСТЕМА БЭКАПОВ (PER-SITE)
@@ -918,6 +1007,94 @@ help-backup:
 	@echo "    make backup-restore-full DIR=backups/full/shop_local_20260118_120000 SITE=shop.local"
 	@echo ""
 
+# Показать помощь по очистке Docker
+help-docker:
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "  🧹 ОЧИСТКА DOCKER (ЭКОНОМИЯ ДИСКА)"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  📊 Мониторинг:"
+	@echo "    make docker-status              # Использование диска"
+	@echo ""
+	@echo "  🧹 Очистка (выбери нужный уровень):"
+	@echo "    make docker-clean               # SOFT: dangling только"
+	@echo "    make docker-clean-full          # FULL: все неиспользуемые"
+	@echo "    make docker-clean-aggressive    # MAX: включая build cache"
+	@echo ""
+	@echo "  ⏰ Автоматизация:"
+	@echo "    make docker-clean-cron          # Еженедельная очистка"
+	@echo ""
+	@echo "  ⚙️  Настройка Docker daemon:"
+	@echo "    make docker-daemon-config       # Показать рекомендации"
+	@echo ""
+	@echo "  📋 Что удаляется:"
+	@echo "    --soft:       Остановленные контейнеры"
+	@echo "                  Dangling images (untagged)"
+	@echo "                  Неиспользуемые networks"
+	@echo "                  Dangling volumes"
+	@echo ""
+	@echo "    --full:       Всё из --soft +"
+	@echo "                  ВСЕ неиспользуемые images"
+	@echo ""
+	@echo "    --aggressive: Всё из --full +"
+	@echo "                  Build cache"
+	@echo "                  Buildx cache"
+	@echo "                  ⚠️  Следующий build будет медленнее!"
+	@echo ""
+	@echo "  💡 Рекомендации:"
+	@echo "    - make docker-clean             # Еженедельно"
+	@echo "    - make docker-clean-full        # Ежемесячно"
+	@echo "    - make docker-clean-aggressive  # При критичном диске"
+	@echo ""
+	@echo "  📁 Что занимает место:"
+	@echo "    /var/lib/docker      - Images, containers, volumes"
+	@echo "    /var/lib/containerd  - Containerd snapshots"
+	@echo ""
+
+# Показать помощь по логам
+help-logs:
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "  📜 УПРАВЛЕНИЕ ЛОГАМИ"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  📊 Мониторинг:"
+	@echo "    make logs-status                    # Размер и статус логов"
+	@echo ""
+	@echo "  🔄 Ротация:"
+	@echo "    make logs-rotate                    # Ротация больших логов"
+	@echo "    make logs-rotate-force              # Принудительная ротация"
+	@echo ""
+	@echo "  🧹 Очистка:"
+	@echo "    make logs-cleanup                   # Удалить логи старше 30 дней"
+	@echo "    make logs-cleanup RETENTION_DAYS=7  # Удалить старше 7 дней"
+	@echo "    make logs-maintain                  # Ротация + очистка"
+	@echo "    make logs-clear-all                 # Удалить ВСЕ логи (осторожно!)"
+	@echo ""
+	@echo "  ⏰ Автоматизация:"
+	@echo "    make logs-setup-cron                # Настроить ежедневную ротацию"
+	@echo ""
+	@echo "  📁 Docker логи:"
+	@echo "    docker logs container_name          # Логи контейнера"
+	@echo "    docker logs -f --tail 100 nginx     # Follow последних 100 строк"
+	@echo ""
+	@echo "  📁 Структура логов:"
+	@echo "    volume/logs/"
+	@echo "    ├── nginx/       # Nginx access/error logs"
+	@echo "    ├── php/         # PHP error logs"
+	@echo "    ├── php-fpm/     # PHP-FPM logs"
+	@echo "    ├── mysql/       # MySQL logs (if enabled)"
+	@echo "    ├── cron/        # Cron job logs"
+	@echo "    ├── supervisor/  # Supervisor logs"
+	@echo "    └── msmtp/       # Mail logs"
+	@echo ""
+	@echo "  💡 Docker logging уже настроен:"
+	@echo "    - max-size: 10m per file"
+	@echo "    - max-file: 3 files per container"
+	@echo "    Дополнительно рекомендуется ротация app логов."
+	@echo ""
+
 # Показать помощь по автоконфигурации
 help-autoconfig:
 	@echo "Команды автоконфигурации системы:"
@@ -968,6 +1145,20 @@ help:
 	@echo "  make security-up    - Включить Fail2ban"
 	@echo "  make security-stats - Статистика атак"
 	@echo ""
+	@echo "📜 Логи:"
+	@echo "  make logs-status    - Статус логов (размер)"
+	@echo "  make logs-rotate    - Ротация логов"
+	@echo "  make logs-cleanup   - Удалить старые логи"
+	@echo ""
+	@echo "🧹 Очистка Docker:"
+	@echo "  make docker-status  - Использование диска"
+	@echo "  make docker-clean   - Мягкая очистка (безопасно)"
+	@echo "  make docker-clean-full - Полная очистка"
+	@echo ""
+	@echo "🔄 Автозапуск (systemd):"
+	@echo "  make install-service   - Установить автозапуск"
+	@echo "  make service-status    - Статус сервиса"
+	@echo ""
 	@echo "⚙️  Настройка:"
 	@echo "  make auto-config    - Автоконфигурация под сервер"
 	@echo "  make validate       - Валидация .env"
@@ -978,6 +1169,8 @@ help:
 	@echo "  make help-backup    - Управление бэкапами"
 	@echo "  make help-security  - Безопасность"
 	@echo "  make help-autoconfig - Автоконфигурация"
+	@echo "  make help-logs      - Управление логами"
+	@echo "  make help-docker    - Очистка Docker (диск)"
 
 # Шпаргалка по основным командам
 help-quick:
@@ -1012,6 +1205,28 @@ help-quick:
 # Валидация .env файла
 validate:
 	@chmod +x ./scripts/validate-env.sh && ./scripts/validate-env.sh
+
+# ==========================================
+# 🔄 SYSTEMD SERVICE (АВТОЗАПУСК)
+# ==========================================
+
+# Установить systemd сервис для автозапуска после перезагрузки
+# Использование: sudo make install-service
+install-service:
+	@echo "🔄 Установка systemd сервиса..."
+	@sudo ./scripts/install-service.sh install
+
+# Удалить systemd сервис
+uninstall-service:
+	@sudo ./scripts/install-service.sh uninstall
+
+# Статус сервиса
+service-status:
+	@./scripts/install-service.sh status
+
+# Логи сервиса
+service-logs:
+	@sudo journalctl -u bitrix-docker -n 50 -f
 
 # === КОМАНДЫ БЕЗОПАСНОСТИ ===
 

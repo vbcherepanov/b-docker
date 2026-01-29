@@ -1,0 +1,49 @@
+# ============================================================================
+# SYSTEMD SERVICE FOR BITRIX DOCKER
+# Auto-start containers after server reboot
+#
+# Installation:
+#   sudo cp scripts/bitrix-docker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable bitrix-docker
+#   sudo systemctl start bitrix-docker
+#
+# Or use:
+#   make install-service
+# ============================================================================
+
+[Unit]
+Description=Bitrix Docker Environment
+Documentation=https://github.com/your-repo/b-docker
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+Group=docker
+
+# Set working directory
+WorkingDirectory=/home/deploy/bitrix
+
+# Environment file
+EnvironmentFile=-/home/deploy/bitrix/.env
+
+# Start containers
+ExecStart=/usr/bin/docker compose -f docker-compose.bitrix.yml --profile prod --profile monitoring --profile backup up -d
+
+# Stop containers gracefully
+ExecStop=/usr/bin/docker compose -f docker-compose.bitrix.yml --profile prod --profile monitoring --profile backup down
+
+# Restart policy
+Restart=on-failure
+RestartSec=30
+
+# Timeout
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
