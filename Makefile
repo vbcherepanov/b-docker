@@ -487,6 +487,46 @@ logs-backup-local:
 logs-backup:
 	$(DOCKER_COMPOSE) --profile backup logs -f backup
 
+# Диагностика MySQL (если не запускается)
+mysql-diag:
+	@echo "╔════════════════════════════════════════════════════════════╗"
+	@echo "║          ДИАГНОСТИКА MYSQL/MARIADB                         ║"
+	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo ""
+	@echo "📊 Ресурсы сервера:"
+	@echo "  RAM: $$(free -h 2>/dev/null | awk '/^Mem:/{print $$2}' || sysctl -n hw.memsize 2>/dev/null | awk '{print $$1/1024/1024/1024 "GB"}')"
+	@echo "  CPU: $$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null) cores"
+	@echo ""
+	@echo "📦 Контейнер MySQL:"
+	@docker inspect $(DOMAIN)_mysql --format='  Status: {{.State.Status}}' 2>/dev/null || echo "  ❌ Контейнер не найден"
+	@docker inspect $(DOMAIN)_mysql --format='  Health: {{.State.Health.Status}}' 2>/dev/null || true
+	@docker inspect $(DOMAIN)_mysql --format='  Restarts: {{.RestartCount}}' 2>/dev/null || true
+	@echo ""
+	@echo "📋 Последние логи:"
+	@docker logs $(DOMAIN)_mysql --tail 30 2>&1 || true
+	@echo ""
+	@echo "🔧 Конфигурация из .env:"
+	@grep -E "^(MYSQL_IMAGE|MYSQL_INNODB|DB_|MYSQL_MEMORY)" .env 2>/dev/null || echo "  .env не найден"
+	@echo ""
+	@echo "💡 Рекомендации:"
+	@echo "  1. Проверьте что RAM >= buffer_pool + 1GB"
+	@echo "  2. Для маленьких серверов используйте: MYSQL_IMAGE=mariadb:10.11"
+	@echo "  3. Перегенерируйте конфиги: make optimize"
+	@echo "  4. Удалите volume и пересоздайте: make mysql-reset"
+
+# Пересоздание MySQL с нуля (ОСТОРОЖНО - удаляет данные!)
+mysql-reset:
+	@echo "⚠️  ВНИМАНИЕ: Это удалит все данные MySQL!"
+	@read -p "Продолжить? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+	$(DOCKER_COMPOSE) stop mysql
+	docker rm -f $(DOMAIN)_mysql 2>/dev/null || true
+	docker volume rm $(DOMAIN)_mysql_data 2>/dev/null || true
+	@echo "✅ Volume удалён. Запустите: make prod (или make local)"
+
+# Оптимизация конфигов под текущий сервер
+optimize:
+	@./scripts/auto-optimize.sh --update-env --force
+
 # Команды для проверки статуса
 status-local:
 	$(DOCKER_COMPOSE_LOCAL) ps
@@ -1123,6 +1163,7 @@ help:
 	@echo "  make first-run      - Полная инициализация с нуля (всё в одной команде!)"
 	@echo "  make first-run-prod - Полная инициализация для production"
 	@echo "  make quick-start    - Быстрый запуск (без настройки)"
+	@echo "  make optimize       - Пересоздать конфиги под текущий сервер"
 	@echo ""
 	@echo "📦 Управление контейнерами:"
 	@echo "  make local          - Запуск для локальной разработки"
@@ -1149,6 +1190,11 @@ help:
 	@echo "  make logs-status    - Статус логов (размер)"
 	@echo "  make logs-rotate    - Ротация логов"
 	@echo "  make logs-cleanup   - Удалить старые логи"
+	@echo ""
+	@echo "🔧 Диагностика:"
+	@echo "  make mysql-diag     - Диагностика MySQL (если не запускается)"
+	@echo "  make mysql-reset    - Пересоздать MySQL с нуля (удалит данные!)"
+	@echo "  make optimize       - Пересоздать конфиги под текущий сервер"
 	@echo ""
 	@echo "🧹 Очистка Docker:"
 	@echo "  make docker-status  - Использование диска"

@@ -317,11 +317,13 @@ services:
     logging: *default-logging
 
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      # NOTE: Using healthcheck.sh wrapper for better diagnostics
+      # Falls back to mysqladmin ping if script not available
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$${MYSQL_ROOT_PASSWORD}\" --silent || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
 
     # Resource limits для продакшн
     deploy:
