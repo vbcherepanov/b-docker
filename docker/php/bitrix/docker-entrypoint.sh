@@ -524,14 +524,56 @@ if [ -n "$NGINX_IP" ]; then
 fi
 
 # ============================================================================
-# АВТОГЕНЕРАЦИЯ PHP НАСТРОЕК НА ОСНОВЕ ENVIRONMENT И SSL
+# АВТОГЕНЕРАЦИЯ PHP НАСТРОЕК НА ОСНОВЕ ENVIRONMENT ПЕРЕМЕННЫХ
 # ============================================================================
 echo -e "${YELLOW}[12/13] Configuring environment-specific PHP settings...${NC}"
 
+# --- OPcache settings from ENV ---
+OPCACHE_MEMORY="${PHP_OPCACHE_MEMORY:-256}"
+OPCACHE_INTERNED="${PHP_OPCACHE_INTERNED_STRINGS:-64}"
+OPCACHE_MAX_FILES="${PHP_OPCACHE_MAX_FILES:-100000}"
+
+# Development: check every request (revalidate_freq=0)
+# Production: check every 2 seconds (revalidate_freq=2)
+if [ "${ENVIRONMENT}" = "prod" ] || [ "${ENVIRONMENT}" = "production" ]; then
+    OPCACHE_REVALIDATE="${PHP_OPCACHE_REVALIDATE_FREQ:-2}"
+else
+    OPCACHE_REVALIDATE="${PHP_OPCACHE_REVALIDATE_FREQ:-0}"
+fi
+
+# Generate OPcache runtime config
+cat > /usr/local/etc/php/conf.d/98-opcache-runtime.ini <<EOF
+; Auto-generated OPcache settings at container startup
+; Environment: ${ENVIRONMENT}
+
+; Memory settings (Bitrix official: 471MB)
+opcache.memory_consumption = ${OPCACHE_MEMORY}
+opcache.interned_strings_buffer = ${OPCACHE_INTERNED}
+
+; File cache settings (Bitrix official: 100000)
+opcache.max_accelerated_files = ${OPCACHE_MAX_FILES}
+
+; File validation frequency
+; 0=every request (dev), 2=every 2 sec (prod)
+opcache.revalidate_freq = ${OPCACHE_REVALIDATE}
+EOF
+
+echo -e "${GREEN}  ✓ OPcache: memory=${OPCACHE_MEMORY}M, files=${OPCACHE_MAX_FILES}, revalidate=${OPCACHE_REVALIDATE}s${NC}"
+
+# --- PHP resource limits from ENV ---
+MEMORY_LIMIT="${PHP_MEMORY_LIMIT:-512M}"
+UPLOAD_MAX="${PHP_UPLOAD_MAX_FILESIZE:-1024M}"
+POST_MAX="${PHP_POST_MAX_SIZE:-1024M}"
+MAX_EXEC_TIME="${PHP_MAX_EXECUTION_TIME:-300}"
+MAX_INPUT_TIME="${PHP_MAX_INPUT_TIME:-60}"
+TZ_VALUE="${TZ:-UTC}"
+
 # --- display_errors ---
 DISPLAY_ERRORS="Off"
+ERROR_REPORTING="E_ALL & ~E_NOTICE & ~E_WARNING"
 if [ "${ENVIRONMENT}" != "prod" ] && [ "${ENVIRONMENT}" != "production" ]; then
     DISPLAY_ERRORS="On"
+    ERROR_REPORTING="E_ALL"
     echo -e "${GREEN}  ✓ Development mode: display_errors=On${NC}"
 else
     echo -e "${BLUE}  Production mode: display_errors=Off${NC}"
@@ -546,7 +588,26 @@ else
     echo -e "${YELLOW}  ⚠ SSL disabled (SSL=$SSL), session.cookie_secure=Off${NC}"
 fi
 
-# Generate runtime PHP config
+# Generate PHP runtime config
+cat > /usr/local/etc/php/conf.d/98-php-runtime.ini <<EOF
+; Auto-generated PHP settings at container startup
+; Environment: ${ENVIRONMENT}, SSL: ${SSL}
+
+; Resource limits
+memory_limit = ${MEMORY_LIMIT}
+upload_max_filesize = ${UPLOAD_MAX}
+post_max_size = ${POST_MAX}
+max_execution_time = ${MAX_EXEC_TIME}
+max_input_time = ${MAX_INPUT_TIME}
+
+; Error handling
+error_reporting = ${ERROR_REPORTING}
+
+; Timezone
+date.timezone = ${TZ_VALUE}
+EOF
+
+# Generate session/display runtime config (loaded last)
 cat > /usr/local/etc/php/conf.d/99-runtime.ini <<EOF
 ; Auto-generated at container startup
 ; Environment: ${ENVIRONMENT}, SSL: ${SSL}
@@ -558,7 +619,8 @@ display_errors = ${DISPLAY_ERRORS}
 session.cookie_secure = ${SESSION_SECURE}
 EOF
 
-echo -e "${GREEN}  ✓ Runtime PHP config generated${NC}"
+echo -e "${GREEN}  ✓ PHP: memory=${MEMORY_LIMIT}, upload=${UPLOAD_MAX}, exec_time=${MAX_EXEC_TIME}s${NC}"
+echo -e "${GREEN}  ✓ Runtime PHP configs generated${NC}"
 
 # ============================================================================
 # ДОБАВЛЕНИЕ ВНУТРЕННЕГО SSL СЕРТИФИКАТА В ДОВЕРЕННЫЕ

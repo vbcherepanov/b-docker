@@ -89,6 +89,48 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# ==========================================================================
+# SECURITY HARDENING (Bitrix official)
+# Based on https://github.com/bitrix-tools/env-docker
+# ==========================================================================
+
+# Base security options for all containers
+x-security-base: &security-base
+  init: true
+  security_opt:
+    - no-new-privileges:true
+
+# tmpfs mounts for security (noexec, nodev, nosuid)
+x-tmpfs-secure: &tmpfs-secure
+  tmpfs:
+    - /tmp:noexec,nodev,nosuid
+    - /var/tmp:noexec,nodev,nosuid
+
+# Minimal capabilities (drop all, add only needed)
+x-cap-minimal: &cap-minimal
+  cap_drop:
+    - ALL
+
+# Capabilities for services that need file operations
+x-cap-files: &cap-files
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - SETUID
+    - SETGID
+    - DAC_OVERRIDE
+
+# Capabilities for nginx (needs NET_BIND_SERVICE for ports < 1024)
+x-cap-nginx: &cap-nginx
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - SETUID
+    - SETGID
+    - NET_BIND_SERVICE
+
 # ============================================================================
 # SERVICES
 # ============================================================================
@@ -132,10 +174,12 @@ services:
       PHP_POST_MAX_SIZE: ${PHP_POST_MAX_SIZE:-64M}
       PHP_MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-300}
       PHP_MAX_INPUT_TIME: ${PHP_MAX_INPUT_TIME:-300}
-      # OPcache
+      # OPcache (Bitrix official recommendations)
       PHP_OPCACHE_ENABLE: ${PHP_OPCACHE_ENABLE:-1}
-      PHP_OPCACHE_MEMORY: ${PHP_OPCACHE_MEMORY:-128}
-      PHP_OPCACHE_MAX_FILES: ${PHP_OPCACHE_MAX_FILES:-10000}
+      PHP_OPCACHE_MEMORY: ${PHP_OPCACHE_MEMORY:-256}
+      PHP_OPCACHE_INTERNED_STRINGS: ${PHP_OPCACHE_INTERNED_STRINGS:-64}
+      PHP_OPCACHE_MAX_FILES: ${PHP_OPCACHE_MAX_FILES:-100000}
+      PHP_OPCACHE_REVALIDATE_FREQ: ${PHP_OPCACHE_REVALIDATE_FREQ:-2}
 
     volumes:
       # Основной код приложения (мультисайт: www/${DOMAIN}/www/)
@@ -176,6 +220,21 @@ services:
     restart: unless-stopped
 
     logging: *default-logging
+
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
 
     # Health check
     healthcheck:
@@ -264,6 +323,21 @@ services:
       start_period: 10s
       retries: 3
 
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+
     labels:
       - "com.docker.compose.service=nginx"
       - "monitoring=true"
@@ -271,9 +345,17 @@ services:
   # ==========================================================================
   # MYSQL - БАЗА ДАННЫХ
   # ==========================================================================
+  # Выбор движка базы данных (MYSQL_IMAGE в .env):
+  # ─────────────────────────────────────────────────────────────────────────
+  # RAM < 4GB:   mariadb:10.11        (default, низкое потребление памяти)
+  # RAM 4-16GB:  quay.io/bitrix24/percona-server:8.0.44-v1-rhel (Bitrix official)
+  # RAM > 16GB:  quay.io/bitrix24/percona-server:8.4.7-v1-rhel  (новейшая версия)
+  # Alternative: mysql:8.0 или mysql:8.4 (официальный MySQL)
+  # ─────────────────────────────────────────────────────────────────────────
   mysql:
     container_name: ${DOMAIN}_mysql
-    # Use MYSQL_IMAGE env var to choose: mariadb:10.11 (default, low RAM) or mysql:8.0
+    # Bitrix official: quay.io/bitrix24/percona-server:8.0.44-v1-rhel
+    # Default: mariadb:10.11 for low RAM environments
     image: ${MYSQL_IMAGE:-mariadb:10.11}
 
     command:
@@ -333,6 +415,18 @@ services:
         reservations:
           memory: ${MYSQL_MEMORY_RESERVATION:-1G}
 
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_NICE
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+
     labels:
       - "com.docker.compose.service=mysql"
       - "monitoring=true"
@@ -378,6 +472,20 @@ services:
       timeout: 10s
       retries: 3
 
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+
     labels:
       - "com.docker.compose.service=redis"
       - "monitoring=true"
@@ -390,7 +498,7 @@ services:
 
   # Сервис подписок (клиенты подключаются сюда через WebSocket)
   push-sub:
-    image: quay.io/bitrix24/push:3.1-v1-alpine
+    image: quay.io/bitrix24/push:3.2-v1-alpine
     container_name: ${DOMAIN}_push_sub
 
     environment:
@@ -417,6 +525,16 @@ services:
       timeout: 10s
       retries: 3
 
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+
     profiles:
       - push
       - full
@@ -426,7 +544,7 @@ services:
 
   # Сервис публикации (PHP отправляет сюда события)
   push-pub:
-    image: quay.io/bitrix24/push:3.1-v1-alpine
+    image: quay.io/bitrix24/push:3.2-v1-alpine
     container_name: ${DOMAIN}_push_pub
 
     environment:
@@ -452,6 +570,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
 
     profiles:
       - push
@@ -494,6 +622,17 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+      - /dev/shm:noexec,nodev,nosuid
 
     labels:
       - "com.docker.compose.service=memcached"

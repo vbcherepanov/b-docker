@@ -2,8 +2,10 @@
 # NGINX - Web Server for Bitrix
 # Supports: local, dev, production environments
 # SSL modes: 0 (none), self (custom certs), free (Let's Encrypt)
+# Features: Brotli compression (Bitrix official)
 # =============================================================================
-FROM nginx:stable-alpine3.17-slim
+# Use nginx:mainline-alpine for brotli module support
+FROM nginx:1.27-alpine
 
 # --- Build Arguments ---
 ARG ENVIRONMENT=local
@@ -42,14 +44,16 @@ ENV UID=${UID}
 ENV GID=${GID}
 ENV DOLLAR='$'
 
-# --- Install dependencies ---
+# --- Install dependencies and Brotli module ---
+# nginx-mod-http-brotli provides brotli compression (Bitrix official feature)
 RUN apk add --no-cache \
     gettext \
     bash \
     curl \
     openssl \
     nss \
-    tzdata
+    tzdata \
+    nginx-mod-http-brotli
 
 # --- Timezone ---
 RUN ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo ${TZ} > /etc/timezone
