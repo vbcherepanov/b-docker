@@ -3,13 +3,28 @@
 . /usr/local/bin/script/func/main.sh
 CONF_FILE="$CONF_DIR/$DOMAIN.conf"
 APP_DIR="/home/$UGN/app/$DOMAIN"
+
+# Compute canonical host for templates
+CANONICAL_HOST="${CANONICAL_HOST:-non-www}"
+if [ "$CANONICAL_HOST" = "www" ]; then
+    CANONICAL_NAME="www.$DOMAIN"
+elif [ "$CANONICAL_HOST" = "non-www" ]; then
+    CANONICAL_NAME="$DOMAIN"
+else
+    CANONICAL_NAME="$DOMAIN"
+fi
+export CANONICAL_HOST CANONICAL_NAME
+
 envsubst '${DOMAIN} ${UGN}' < "$TEMPLATE_DIR/default_conf.tmpl" > "$CONF_DIR/default.conf"
 
-if [ ! -f "$CONF_FILE" ]; then
-    echo "📄 Файл конфигурации не найден, создаём: $CONF_FILE"
+# Skip generation if per-site config exists in sites-enabled (takes priority)
+if [ -f "/etc/nginx/sites-enabled/${DOMAIN}.conf" ]; then
+    echo "[main] Per-site config found for $DOMAIN, skipping template generation"
+elif [ ! -f "$CONF_FILE" ]; then
+    echo "[main] Config not found, creating: $CONF_FILE"
     envsubst < "$TEMPLATE_DIR/site.conf.tmpl" > "$CONF_FILE"
 else
-    echo "✅ Файл конфигурации уже существует: $CONF_FILE"
+    echo "[main] Config already exists: $CONF_FILE"
 fi
 
 # Создание директории сайта, если её нет

@@ -2,9 +2,10 @@
 # MAIN SITE - ${DOMAIN} (HTTPS)
 # Production with SSL/TLS
 # Multi-site structure: www/${DOMAIN}/www/
+# Canonical host: ${CANONICAL_HOST}
 # =============================================================================
 
-# HTTP to HTTPS redirect
+# HTTP to HTTPS redirect (all variants go to canonical HTTPS)
 server {
     listen 80;
     server_name ${DOMAIN} www.${DOMAIN};
@@ -14,20 +15,20 @@ server {
         root /var/www/certbot;
     }
 
-    # Redirect all other traffic to HTTPS
+    # Redirect all other traffic to canonical HTTPS
     location / {
-        return 301 https://${DOLLAR}host${DOLLAR}request_uri;
+        return 301 https://${CANONICAL_NAME}${DOLLAR}request_uri;
     }
 }
 
-# HTTPS server
+# HTTPS server (canonical)
 server {
     listen 443 ssl http2;
-    server_name ${DOMAIN} www.${DOMAIN};
+    server_name ${CANONICAL_NAME};
 
     # SSL certificates (Let's Encrypt or custom)
-    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_certificate ${CERT_PATH};
+    ssl_certificate_key ${KEY_PATH};
 
     # SSL settings
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -78,3 +79,5 @@ server {
     # resolver.conf not needed here - OCSP stapling has its own resolver above
     include /etc/nginx/snippets/bitrix.conf;
 }
+
+# REDIRECT_BLOCK_PLACEHOLDER

@@ -25,14 +25,61 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
 
         # Process main domain
         echo "[ssl] Processing main domain: $DOMAIN"
-        cert_paths=$(get_cert_paths "$DOMAIN" "$EMAIL")
-        if [ $? -eq 0 ]; then
-            CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
-            KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
-            export CERT_PATH KEY_PATH
-            envsubst < "$TEMPLATE_DIR/ssl_site.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN.conf"
-            CERT_GENERATED=1
-            echo "[ssl] Created nginx config: ssl_$DOMAIN.conf"
+
+        # Skip template generation if per-site config exists in sites-enabled
+        if [ -f "/etc/nginx/sites-enabled/${DOMAIN}.conf" ]; then
+            echo "[ssl] Per-site config found for $DOMAIN, skipping template generation"
+        else
+            cert_paths=$(get_cert_paths "$DOMAIN" "$EMAIL")
+            if [ $? -eq 0 ]; then
+                CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
+                KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
+
+                # Compute canonical host settings for template
+                CANONICAL_HOST="${CANONICAL_HOST:-non-www}"
+                if [ "$CANONICAL_HOST" = "www" ]; then
+                    CANONICAL_NAME="www.$DOMAIN"
+                    REDIRECT_NAME="$DOMAIN"
+                elif [ "$CANONICAL_HOST" = "non-www" ]; then
+                    CANONICAL_NAME="$DOMAIN"
+                    REDIRECT_NAME="www.$DOMAIN"
+                else
+                    # "both" - no redirect
+                    CANONICAL_NAME="$DOMAIN www.$DOMAIN"
+                    REDIRECT_NAME=""
+                fi
+
+                export CERT_PATH KEY_PATH CANONICAL_HOST CANONICAL_NAME REDIRECT_NAME
+                envsubst < "$TEMPLATE_DIR/ssl_site.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN.conf"
+
+                # Append redirect server block if needed
+                if [ -n "$REDIRECT_NAME" ]; then
+                    cat >> "$CONF_DIR/ssl_$DOMAIN.conf" << REDIRECT_EOF
+# Redirect non-canonical HTTPS to canonical
+server {
+    listen 443 ssl http2;
+    server_name ${REDIRECT_NAME};
+
+    ssl_certificate ${CERT_PATH};
+    ssl_certificate_key ${KEY_PATH};
+
+    return 301 https://${CANONICAL_NAME}\$request_uri;
+}
+REDIRECT_EOF
+                fi
+
+                # Remove placeholder from template output
+                sed -i 's/# REDIRECT_BLOCK_PLACEHOLDER//' "$CONF_DIR/ssl_$DOMAIN.conf"
+
+                # Remove HTTP-only config (replaced by SSL config with HTTP redirect)
+                if [ -f "$CONF_DIR/$DOMAIN.conf" ]; then
+                    echo "[ssl] Removing HTTP-only config: $DOMAIN.conf (replaced by SSL config)"
+                    rm -f "$CONF_DIR/$DOMAIN.conf"
+                fi
+
+                CERT_GENERATED=1
+                echo "[ssl] Created nginx config: ssl_$DOMAIN.conf (canonical: $CANONICAL_NAME)"
+            fi
         fi
 
         sleep 2
@@ -141,12 +188,55 @@ EOFSCRIPT
         echo "[ssl] Mode: Self-signed/custom certificates"
         echo "[ssl] Looking for certificates in: $SSL_PATH/$DOMAIN/"
 
-        if [ -f "$SSL_PATH/$DOMAIN/$SSL_KEY" ] && [ -f "$SSL_PATH/$DOMAIN/$SSL_PRIV_KEY" ]; then
+        # Skip template generation if per-site config exists in sites-enabled
+        if [ -f "/etc/nginx/sites-enabled/${DOMAIN}.conf" ]; then
+            echo "[ssl] Per-site config found for $DOMAIN, skipping template generation"
+        elif [ -f "$SSL_PATH/$DOMAIN/$SSL_KEY" ] && [ -f "$SSL_PATH/$DOMAIN/$SSL_PRIV_KEY" ]; then
             CERT_PATH="$SSL_PATH/$DOMAIN/$SSL_KEY"
             KEY_PATH="$SSL_PATH/$DOMAIN/$SSL_PRIV_KEY"
-            export CERT_PATH KEY_PATH
+
+            # Compute canonical host settings for template
+            CANONICAL_HOST="${CANONICAL_HOST:-non-www}"
+            if [ "$CANONICAL_HOST" = "www" ]; then
+                CANONICAL_NAME="www.$DOMAIN"
+                REDIRECT_NAME="$DOMAIN"
+            elif [ "$CANONICAL_HOST" = "non-www" ]; then
+                CANONICAL_NAME="$DOMAIN"
+                REDIRECT_NAME="www.$DOMAIN"
+            else
+                CANONICAL_NAME="$DOMAIN www.$DOMAIN"
+                REDIRECT_NAME=""
+            fi
+
+            export CERT_PATH KEY_PATH CANONICAL_HOST CANONICAL_NAME REDIRECT_NAME
             envsubst < "$TEMPLATE_DIR/ssl_site.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN.conf"
-            echo "[ssl] Loaded custom certificates for $DOMAIN"
+
+            # Append redirect server block if needed
+            if [ -n "$REDIRECT_NAME" ]; then
+                cat >> "$CONF_DIR/ssl_$DOMAIN.conf" << REDIRECT_EOF
+# Redirect non-canonical HTTPS to canonical
+server {
+    listen 443 ssl http2;
+    server_name ${REDIRECT_NAME};
+
+    ssl_certificate ${CERT_PATH};
+    ssl_certificate_key ${KEY_PATH};
+
+    return 301 https://${CANONICAL_NAME}\$request_uri;
+}
+REDIRECT_EOF
+            fi
+
+            # Remove placeholder from template output
+            sed -i 's/# REDIRECT_BLOCK_PLACEHOLDER//' "$CONF_DIR/ssl_$DOMAIN.conf"
+
+            # Remove HTTP-only config (replaced by SSL config with HTTP redirect)
+            if [ -f "$CONF_DIR/$DOMAIN.conf" ]; then
+                echo "[ssl] Removing HTTP-only config: $DOMAIN.conf (replaced by SSL config)"
+                rm -f "$CONF_DIR/$DOMAIN.conf"
+            fi
+
+            echo "[ssl] Loaded custom certificates for $DOMAIN (canonical: $CANONICAL_NAME)"
             reload_nginx
         else
             echo "[ssl] WARNING: Certificate files not found!"

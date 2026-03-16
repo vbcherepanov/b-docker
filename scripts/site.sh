@@ -388,8 +388,8 @@ generate_nginx_config() {
 
     log "INFO" "Generating nginx config for $domain..."
 
-    # PHP-FPM upstream name (bitrix is our main container)
-    local php_upstream="bitrix:9000"
+    # PHP-FPM upstream name (configurable for split mode via PHP_FPM_HOST)
+    local php_upstream="${PHP_FPM_HOST:-bitrix}:9000"
 
     # SSL certificate paths
     local ssl_cert ssl_key
@@ -401,20 +401,54 @@ generate_nginx_config() {
         ssl_key="/etc/nginx/ssl/$domain/$domain.key"
     fi
 
+    # Determine canonical host for redirect logic
+    local canonical_host="${CANONICAL_HOST:-non-www}"
+    local canonical_name redirect_name
+
+    if [ "$canonical_host" = "www" ]; then
+        canonical_name="www.$domain"
+        redirect_name="$domain"
+    elif [ "$canonical_host" = "non-www" ]; then
+        canonical_name="$domain"
+        redirect_name="www.$domain"
+    else
+        # "both" - serve both, no redirect
+        canonical_name="$domain www.$domain"
+        redirect_name=""
+    fi
+
     if [ "$with_ssl" = "true" ]; then
-        # SSL mode: HTTPS server + HTTP redirect
+        # SSL mode: HTTPS server + HTTP redirect + optional canonical redirect
+        local redirect_block=""
+        if [ -n "$redirect_name" ]; then
+            redirect_block="
+# Redirect to canonical URL (HTTPS)
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $redirect_name;
+
+    ssl_certificate $ssl_cert;
+    ssl_certificate_key $ssl_key;
+
+    return 301 https://${canonical_name}\$request_uri;
+}
+"
+        fi
+
         cat > "$config_file" << NGINX_SSL
 # ============================================================================
 # Site: $domain (SSL)
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
 # PHP: $php_version
+# Canonical: $canonical_host ($canonical_name)
 # ============================================================================
 
-# HTTPS Server
+# HTTPS Server (canonical)
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name $domain www.$domain;
+    server_name $canonical_name;
 
     root /home/$UGN/app/$domain/www;
     index index.php index.html index.htm;
@@ -438,84 +472,67 @@ server {
     access_log /var/log/nginx/${domain}.access.log main_json;
     error_log /var/log/nginx/${domain}.error.log warn;
 
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
+    # Include shared security headers, rate limiting, bot blocking
+    include /etc/nginx/snippets/security.conf;
 
-    # Gzip
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
-
-    # Main location
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    # PHP processing
-    location ~ \.php\$ {
-        fastcgi_pass $php_upstream;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        include fastcgi_params;
-        fastcgi_read_timeout 600;
-        fastcgi_send_timeout 600;
-        fastcgi_buffer_size 64k;
-        fastcgi_buffers 4 64k;
-    }
-
-    # Bitrix specific
-    location ~* ^/bitrix/(modules|local_cache|stack_cache|managed_cache|cache)/ {
-        deny all;
-    }
-
-    location ~* ^/upload/1c_exchange/ {
-        deny all;
-    }
-
-    # Static files caching
-    location ~* \.(jpg|jpeg|gif|png|svg|ico|css|js|woff|woff2|ttf|eot)\$ {
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-        access_log off;
-    }
-
-    # Deny hidden files
-    location ~ /\. {
-        deny all;
-        access_log off;
-        log_not_found off;
-    }
+    # Include Bitrix-specific routing, caching, FastCGI config
+    # (safe to include even before Bitrix is installed — uses try_files)
+    include /etc/nginx/snippets/bitrix.conf;
 
     # Health check
-    location = /health {
-        access_log off;
-        return 200 "OK";
-        add_header Content-Type text/plain;
-    }
+    include /etc/nginx/snippets/health.conf;
 }
-
-# Redirect HTTP to HTTPS
+${redirect_block}
+# Redirect HTTP to HTTPS (canonical)
 server {
     listen 80;
     listen [::]:80;
     server_name $domain www.$domain;
-    return 301 https://\$server_name\$request_uri;
+
+    # ACME challenge for Let's Encrypt renewal
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://${canonical_name}\$request_uri;
+    }
 }
 NGINX_SSL
     else
         # HTTP-only mode
+        local http_redirect_block=""
+        if [ -n "$redirect_name" ]; then
+            http_redirect_block="
+# Redirect to canonical URL (HTTP)
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $redirect_name;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 http://${canonical_name}\$request_uri;
+    }
+}
+"
+        fi
+
         cat > "$config_file" << NGINX
 # ============================================================================
 # Site: $domain
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
 # PHP: $php_version
+# Canonical: $canonical_host ($canonical_name)
 # ============================================================================
 
 server {
     listen 80;
     listen [::]:80;
-    server_name $domain www.$domain;
+    server_name $canonical_name;
 
     root /home/$UGN/app/$domain/www;
     index index.php index.html index.htm;
@@ -524,66 +541,22 @@ server {
     access_log /var/log/nginx/${domain}.access.log main_json;
     error_log /var/log/nginx/${domain}.error.log warn;
 
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
+    # Include shared security headers, rate limiting, bot blocking
+    include /etc/nginx/snippets/security.conf;
 
-    # Gzip
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
-
-    # Main location
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    # PHP processing
-    location ~ \.php\$ {
-        fastcgi_pass $php_upstream;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        include fastcgi_params;
-
-        # Timeouts
-        fastcgi_read_timeout 600;
-        fastcgi_send_timeout 600;
-
-        # Buffers
-        fastcgi_buffer_size 64k;
-        fastcgi_buffers 4 64k;
-    }
-
-    # Bitrix specific
-    location ~* ^/bitrix/(modules|local_cache|stack_cache|managed_cache|cache)/ {
-        deny all;
-    }
-
-    location ~* ^/upload/1c_exchange/ {
-        deny all;
-    }
-
-    # Static files caching
-    location ~* \.(jpg|jpeg|gif|png|svg|ico|css|js|woff|woff2|ttf|eot)\$ {
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-        access_log off;
-    }
-
-    # Deny hidden files
-    location ~ /\. {
-        deny all;
-        access_log off;
-        log_not_found off;
-    }
+    # Include Bitrix-specific routing, caching, FastCGI config
+    # (safe to include even before Bitrix is installed — uses try_files)
+    include /etc/nginx/snippets/bitrix.conf;
 
     # Health check
-    location = /health {
-        access_log off;
-        return 200 "OK";
-        add_header Content-Type text/plain;
+    include /etc/nginx/snippets/health.conf;
+
+    # ACME challenge for future Let's Encrypt setup
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
     }
 }
+${http_redirect_block}
 NGINX
     fi
 

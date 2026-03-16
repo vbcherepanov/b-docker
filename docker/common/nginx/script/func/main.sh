@@ -140,9 +140,21 @@ request_cert() {
 
     echo "[ssl] Requesting certificate for $domain..." >&2
 
+    # Count domain parts to decide whether to include www variant
+    # 2 parts (example.com) -> request both: -d example.com -d www.example.com
+    # 3+ parts (app.example.com) -> request only: -d app.example.com
+    local domain_parts
+    domain_parts=$(echo "$domain" | awk -F. '{print NF}')
+
+    local domain_args="-d $domain"
+    if [ "$domain_parts" -le 2 ]; then
+        domain_args="$domain_args -d www.$domain"
+        echo "[ssl] Including www.$domain in certificate request" >&2
+    fi
+
     local output
     output=$(certbot certonly --nginx --non-interactive --agree-tos \
-        --email "$email" -d "$domain" 2>&1)
+        --email "$email" $domain_args 2>&1)
     local result=$?
 
     echo "$output" >&2

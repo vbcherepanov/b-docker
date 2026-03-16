@@ -26,6 +26,20 @@ else
     echo "Warning: MONITORING_USER or MONITORING_PASSWORD not set, htpasswd not created"
 fi
 
+# Replace PHP_FPM_HOST in nginx snippets (for split mode support)
+PHP_FPM_HOST="${PHP_FPM_HOST:-bitrix}"
+echo "PHP-FPM upstream: ${PHP_FPM_HOST}:9000"
+if [ "$PHP_FPM_HOST" != "bitrix" ]; then
+    echo "Updating nginx configs for PHP_FPM_HOST=${PHP_FPM_HOST}..."
+    # Update all nginx config files that reference the PHP-FPM upstream
+    for conf_file in /etc/nginx/snippets/*.conf /etc/nginx/conf.d/*.conf; do
+        if [ -f "$conf_file" ] && grep -q 'bitrix:9000' "$conf_file"; then
+            sed -i "s/bitrix:9000/${PHP_FPM_HOST}:9000/g" "$conf_file"
+            echo "  Updated: $conf_file"
+        fi
+    done
+fi
+
 # Run SSL setup script
 if [ -f /usr/local/bin/script/ssl.sh ]; then
     echo "Running SSL setup..."

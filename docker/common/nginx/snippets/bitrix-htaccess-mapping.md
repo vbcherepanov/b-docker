@@ -1,6 +1,6 @@
-# Сопоставление .htaccess и Nginx для Bitrix
+# Bitrix .htaccess to Nginx Mapping
 
-Этот документ показывает, как правила из `.htaccess` переведены в конфигурацию Nginx.
+This document shows how Apache .htaccess rules are translated to Nginx configuration.
 
 ## 1. Options -Indexes
 
@@ -14,7 +14,7 @@ Options -Indexes
 autoindex off;
 ```
 
-**Назначение:** Запрещает отображение списка файлов в директории, если нет индексного файла.
+**Purpose:** Disables directory listing when no index file is present.
 
 ---
 
@@ -30,11 +30,11 @@ ErrorDocument 404 /404.php
 error_page 404 /404.php;
 ```
 
-**Назначение:** Обработка 404 ошибок через PHP скрипт.
+**Purpose:** Handles 404 errors through PHP script.
 
 ---
 
-## 3. URL Rewrite (ЧПУ)
+## 3. URL Rewrite (SEF URLs)
 
 ### Apache (.htaccess)
 ```apache
@@ -52,31 +52,47 @@ error_page 404 /404.php;
 
 ### Nginx (bitrix.conf)
 ```nginx
-# Основная обработка
+# SEO: Remove trailing /index.php
+if ($request_uri ~* "^(.*/)index\.php$") {
+    return 301 $1;
+}
+
+# Main handler
 location / {
     try_files $uri $uri/ @bitrix;
 }
 
-# Обработчик ЧПУ
+# REST API endpoint (separate for rate-limiting)
+location ^~ /rest/ {
+    try_files $uri $uri/ @bitrix;
+}
+
+# Bitrix routing handler (routing_index.php for Bitrix 22.0+)
+# For older versions, change to: $document_root/bitrix/urlrewrite.php
 location @bitrix {
     set $php_upstream bitrix:9000;
     fastcgi_pass $php_upstream;
     include fastcgi_params;
 
-    fastcgi_param SCRIPT_FILENAME $document_root/bitrix/urlrewrite.php;
-    fastcgi_param SCRIPT_NAME /bitrix/urlrewrite.php;
+    fastcgi_param SCRIPT_FILENAME $document_root/bitrix/modules/main/include/routing_index.php;
+    fastcgi_param SCRIPT_NAME /bitrix/modules/main/include/routing_index.php;
     fastcgi_param SERVER_NAME $host;
 
-    # HTTP Authorization
+    # HTTP Authorization passthrough
     fastcgi_param REMOTE_USER $http_authorization;
     fastcgi_param HTTP_AUTHORIZATION $http_authorization;
+
+    # HTTPS and proxy headers
+    fastcgi_param HTTPS $https if_not_empty;
+    fastcgi_param BX_CACHE_SSL $https if_not_empty;
 }
 ```
 
-**Назначение:**
-- Если файл/директория существует - отдать напрямую
-- Иначе - передать в `/bitrix/urlrewrite.php` для обработки ЧПУ
-- Передача HTTP Authorization для REST API
+**Purpose:**
+- If file/directory exists, serve directly
+- Otherwise, pass to routing_index.php (Bitrix 22.0+ new router with urlrewrite.php fallback)
+- Pass HTTP Authorization for REST API
+- BX_CACHE_SSL for composite cache over HTTPS
 
 ---
 
@@ -94,7 +110,7 @@ location @bitrix {
 index index.php index.html;
 ```
 
-**Назначение:** Определяет порядок индексных файлов.
+**Purpose:** Defines index file lookup order.
 
 ---
 
@@ -108,11 +124,11 @@ index index.php index.html;
 ```
 
 ### Nginx
-Не требуется - Nginx не поддерживает content negotiation по умолчанию.
+Not required — Nginx does not support content negotiation by default.
 
 ---
 
-## 6. Кеширование статических файлов
+## 6. Static File Caching
 
 ### Apache (.htaccess)
 ```apache
@@ -128,30 +144,91 @@ index index.php index.html;
 
 ### Nginx (bitrix.conf)
 ```nginx
-# Изображения
+# Images
 location ~* \.(jpg|jpeg|gif|png|webp|svg|ico)$ {
     expires 3d;
     add_header Cache-Control "public, immutable";
     access_log off;
-    error_page 404 /404.html;
+    error_page 404 /404.php;
 }
 
-# CSS и JavaScript
+# CSS and JavaScript
 location ~* \.(css|js)$ {
     expires 3d;
     add_header Cache-Control "public, immutable";
     access_log off;
-    error_page 404 /404.html;
+    error_page 404 /404.php;
+}
+
+# Fonts (30 days)
+location ~* \.(ttf|ttc|otf|eot|woff|woff2)$ {
+    expires 30d;
+}
+
+# Media files (30 days)
+location ~* \.(mp4|mp3|ogg|ogv|webm|flv|swf)$ {
+    expires 30d;
 }
 ```
 
-**Назначение:** Браузерное кеширование статических файлов на 3 дня.
+**Purpose:** Browser caching for static files (3 days for images/CSS/JS, 30 days for fonts/media).
 
 ---
 
-## Дополнительные правила безопасности (не в .htaccess, но необходимы)
+## 7. BX_CACHE_SSL (Composite cache over HTTPS)
 
-### Запрет выполнения PHP в upload
+### Apache (.htaccess / .settings.php)
+```apache
+RewriteRule .* - [E=BX_CACHE_SSL:%{HTTPS}]
+```
+
+### Nginx (bitrix.conf)
+```nginx
+# In @bitrix and \.php$ locations:
+fastcgi_param BX_CACHE_SSL $https if_not_empty;
+```
+
+**Purpose:** Bitrix composite cache needs to know if the request is HTTPS to generate correct cache file paths. Without this, composite cache may serve HTTP content over HTTPS or vice versa.
+
+---
+
+## 8. PHP-FPM Status/Ping Protection
+
+### Apache
+Not applicable (handled by PHP-FPM config).
+
+### Nginx (bitrix.conf)
+```nginx
+location ~ ^/(status|ping)$ {
+    return 404;
+    access_log off;
+}
+```
+
+**Purpose:** Prevents information leak from PHP-FPM status/ping endpoints.
+
+---
+
+## 9. .phar File Blocking
+
+### Apache
+Not typically covered in .htaccess.
+
+### Nginx (bitrix.conf)
+```nginx
+location ~ \.phar$ {
+    deny all;
+    access_log off;
+}
+```
+
+**Purpose:** Prevents PHP archive exploitation via direct URL access.
+
+---
+
+## Additional Security Rules
+
+### Block PHP execution in upload
 ```nginx
 location ~* /upload/.*\.(php|php3|php4|php5|php6|php7|php8|phtml|pl|asp|aspx|cgi|dll|exe|shtm|shtml|fcg|fcgi|fpl|asmx|pht|py|psp|rb|var)$ {
     types {
@@ -160,71 +237,113 @@ location ~* /upload/.*\.(php|php3|php4|php5|php6|php7|php8|phtml|pl|asp|aspx|cgi
 }
 ```
 
-### Запрет доступа к системным директориям
+### Block system directories (using ^~ for priority over regex)
 ```nginx
-location ~* ^/bitrix/(modules|local_cache|stack_cache|managed_cache|php_interface) {
-    deny all;
-    access_log off;
+location ^~ /bitrix/modules { deny all; }
+location ^~ /bitrix/local_cache { deny all; }
+location ^~ /bitrix/stack_cache { deny all; }
+location ^~ /bitrix/managed_cache { deny all; }
+location ^~ /bitrix/php_interface { deny all; }
+```
+
+### Block /bitrix/cache/ (except CSS/JS)
+```nginx
+# CSS/JS exception (MUST be declared before the deny rule)
+location ~* ^/bitrix/cache/(css/.+\.css|js/.+\.js)$ {
+    expires 30d;
 }
 
-location ~* ^/bitrix/cache {
+# Block everything else in /bitrix/cache/
+location ~* ^/bitrix/cache/ {
     deny all;
-    access_log off;
 }
 ```
 
-### Запрет доступа к VCS и скрытым файлам
+### Block VCS and hidden files
 ```nginx
-location ~* /\.ht {
-    deny all;
-}
+location ~* /\.ht { deny all; }
+location ~* /\.(svn|hg|git) { deny all; }
+```
 
-location ~* /\.(svn|hg|git) {
-    deny all;
-}
+### Block composite cache config
+```nginx
+location ~* ^/bitrix/html_pages/\.config\.php { deny all; }
+location ~* ^/bitrix/html_pages/\.enabled { deny all; }
 ```
 
 ---
 
-## Преимущества Nginx конфигурации
+## Push & Pull (WebSocket support)
 
-1. **Производительность:** Nginx обрабатывает статику быстрее Apache
-2. **Безопасность:** Дополнительные правила защиты системных директорий
-3. **Кеширование:** Более гибкие настройки с `Cache-Control`
-4. **Прозрачность:** Явные правила вместо условных директив
-5. **Композитный кеш:** Поддержка Bitrix Composite из коробки
+### Apache
+Requires mod_proxy_wstunnel — often not available.
+
+### Nginx (bitrix.conf)
+```nginx
+location /bitrix/sub/ {
+    proxy_pass http://push-sub:8010;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 86400s;
+}
+
+location /bitrix/subws/ {
+    # Same as above — WebSocket endpoint
+}
+
+location /bitrix/pub/ {
+    proxy_pass http://push-pub:9010;
+    # Internal only — restricted to Docker network
+}
+```
+
+**Purpose:** Real-time notifications via Push&Pull module.
 
 ---
 
-## Тестирование
+## Testing
 
-После применения конфигурации проверьте:
+After applying configuration, verify:
 
 ```bash
-# 1. Проверка синтаксиса nginx
-docker exec bitrix.local_nginx nginx -t
+# 1. Check nginx syntax
+docker compose exec nginx nginx -t
 
-# 2. Перезагрузка nginx
-docker exec bitrix.local_nginx nginx -s reload
+# 2. Reload nginx
+docker compose exec nginx nginx -s reload
 
-# 3. Проверка ЧПУ
-curl -I http://bitrix.local/some-page/
+# 3. Test SEF URLs (should return 200)
+curl -I http://your-site.local/some-page/
 
-# 4. Проверка 404
-curl -I http://bitrix.local/nonexistent
+# 4. Test 404 handling
+curl -I http://your-site.local/nonexistent-page
 
-# 5. Проверка кеширования
-curl -I http://bitrix.local/images/logo.png
+# 5. Test static file caching (should have Cache-Control header)
+curl -I http://your-site.local/images/logo.png
 
-# 6. Проверка безопасности (должен быть 403)
-curl -I http://bitrix.local/bitrix/modules/
-curl -I http://bitrix.local/upload/test.php
+# 6. Test security (should return 403)
+curl -I http://your-site.local/bitrix/modules/
+curl -I http://your-site.local/upload/test.php
+curl -I http://your-site.local/bitrix/cache/
+
+# 7. Test REST API routing
+curl -I http://your-site.local/rest/
+
+# 8. Test index.php redirect (should 301 to /)
+curl -I http://your-site.local/index.php
+
+# 9. Test .phar blocking (should return 403)
+curl -I http://your-site.local/test.phar
+
+# 10. Test PHP-FPM status protection (should return 404)
+curl -I http://your-site.local/status
 ```
 
 ---
 
-## Дополнительная информация
+## References
 
-- [Официальная документация Nginx](https://nginx.org/ru/docs/)
-- [Bitrix Framework - Настройка сервера](https://dev.1c-bitrix.ru/learning/course/index.php?COURSE_ID=32&LESSON_ID=2483)
+- [Nginx official documentation](https://nginx.org/en/docs/)
+- [Bitrix Framework - Server setup](https://dev.1c-bitrix.ru/learning/course/index.php?COURSE_ID=32&LESSON_ID=2483)
 - [Bitrix Virtual Appliance](https://www.1c-bitrix.ru/products/virtual_appliance/)
