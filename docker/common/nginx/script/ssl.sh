@@ -105,27 +105,31 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
             sleep 2
         fi
 
-        # Setup cron for automatic renewal if any certificate was created
-        if [ "$CERT_GENERATED" -eq 1 ]; then
-            echo "[ssl] Setting up daily certificate check (cron)..."
+        # Always setup cron for automatic renewal when SSL=free
+        # Cron must run regardless of CERT_GENERATED — certificates may already
+        # exist on the volume from a previous run and still need renewal checks
+        echo "[ssl] Setting up daily certificate check (cron)..."
 
-            # Create renewal script
-            cat > /usr/local/bin/ssl-renew.sh << 'EOFSCRIPT'
+        # Create renewal script
+        cat > /usr/local/bin/ssl-renew.sh << 'EOFSCRIPT'
 #!/bin/sh
 . /usr/local/bin/script/func/main.sh
 check_and_renew_all >> /var/log/letsencrypt/renewal.log 2>&1
 EOFSCRIPT
-            chmod +x /usr/local/bin/ssl-renew.sh
+        chmod +x /usr/local/bin/ssl-renew.sh
 
-            # Add cron job - check daily at 3:00 AM
+        # Add cron job - check daily at 3:00 AM (avoid duplicates on restart)
+        grep -q 'ssl-renew.sh' /etc/crontabs/root 2>/dev/null || \
             echo "0 3 * * * /usr/local/bin/ssl-renew.sh" >> /etc/crontabs/root
 
-            # Ensure log directory exists
-            mkdir -p /var/log/letsencrypt
+        # Ensure log directory exists
+        mkdir -p /var/log/letsencrypt
 
-            echo "[ssl] Starting crond..."
-            crond
+        echo "[ssl] Starting crond for certificate renewal..."
+        crond
 
+        # Reload nginx if any new configs were generated
+        if [ "$CERT_GENERATED" -eq 1 ]; then
             echo "[ssl] Reloading nginx with new SSL configs..."
             reload_nginx
         fi
