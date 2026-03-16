@@ -29,6 +29,9 @@ x-volumes:
   # Per-site configurations (DB credentials, SMTP, etc.)
   sites-config: &sites-config ./config/sites:/etc/bitrix-sites:ro
 
+  # Redis unix socket (shared between redis and php containers)
+  redis-socket: &redis-socket redis-socket:/var/run/redis
+
   # Логи (доступны и для хоста и для Promtail)
   logs-nginx: &logs-nginx ./volume/logs/nginx:/var/log/nginx
   logs-letsencrypt: &logs-letsencrypt ./volume/logs/letsencrypt:/var/log/letsencrypt
@@ -72,6 +75,7 @@ x-bitrix-env: &bitrix-env
   # Cache
   REDIS_HOST: ${REDIS_HOST:-redis}
   REDIS_PORT: ${REDIS_PORT:-6379}
+  REDIS_UNIX_SOCKET: /var/run/redis/redis.sock
   MEMCACHED_HOST: ${MEMCACHED_HOST:-memcached}
   MEMCACHED_PORT: 11211
   # Queue (if RabbitMQ enabled)
@@ -197,6 +201,8 @@ services:
       - ./volume/logs/msmtp:/var/log/msmtp
       # Composer cache (для ускорения установки зависимостей)
       - composer-cache:/home/${UGN}/.composer
+      # Redis unix socket (shared volume for ~30% performance boost)
+      - *redis-socket
 
     depends_on:
       <<: *depends-on-all
@@ -446,7 +452,6 @@ services:
       redis-server
       /usr/local/etc/redis/redis.conf
       --maxmemory ${REDIS_MAX_MEMORY:-512mb}
-      --maxmemory-policy allkeys-lru
 
     environment:
       TZ: ${TZ}
@@ -455,6 +460,8 @@ services:
       - redis-data:/data
       - ./volume/logs/redis:/var/log/redis
       - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      # Unix socket shared with PHP container
+      - *redis-socket
 
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -589,7 +596,7 @@ services:
       - "com.docker.compose.service=push-pub"
 
   # ==========================================================================
-  # MEMCACHED - ДОПОЛНИТЕЛЬНОЕ КЭШИРОВАНИЕ
+  # MEMCACHED - ADDITIONAL CACHING (production-proven settings)
   # ==========================================================================
   memcached:
     container_name: ${DOMAIN}_memcached
@@ -598,14 +605,21 @@ services:
       dockerfile: docker/memcached/Dockerfile
       args:
         TZ: ${TZ}
-        MEMCACHED_MEMORY_LIMIT: ${MEMCACHED_MEMORY_LIMIT:-256}
-        MEMCACHED_THREADS: ${MEMCACHED_THREADS:-4}
+        MEMCACHED_MEMORY_LIMIT: ${MEMCACHED_MEMORY_LIMIT:-1024}
+        MEMCACHED_THREADS: ${MEMCACHED_THREADS:-8}
         MEMCACHED_CONN_LIMIT: ${MEMCACHED_CONN_LIMIT:-1024}
+        MEMCACHED_MAX_ITEM_SIZE: ${MEMCACHED_MAX_ITEM_SIZE:-2m}
 
     environment:
       TZ: ${TZ}
 
-    command: memcached -u root -m ${MEMCACHED_MEMORY_LIMIT:-256} -c ${MEMCACHED_CONN_LIMIT:-1024} -t ${MEMCACHED_THREADS:-4} -v
+    command: >-
+      memcached -u root
+      -m ${MEMCACHED_MEMORY_LIMIT:-1024}
+      -c ${MEMCACHED_CONN_LIMIT:-1024}
+      -t ${MEMCACHED_THREADS:-8}
+      -I ${MEMCACHED_MAX_ITEM_SIZE:-2m}
+      -o modern
 
     volumes:
       - ./volume/logs/memcached:/var/log/memcached
@@ -1158,6 +1172,10 @@ volumes:
     name: ${DOMAIN}_loki_data
   promtail-positions:
     name: ${DOMAIN}_promtail_positions
+
+  # Redis unix socket (shared between redis and bitrix containers)
+  redis-socket:
+    name: ${DOMAIN}_redis_socket
 
   # Composer cache
   composer-cache:

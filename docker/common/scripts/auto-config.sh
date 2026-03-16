@@ -483,9 +483,11 @@ HTTPS_PORT=${https_port}
 DB_PORT=${db_port}
 
 # Рекомендуемые настройки контейнеров
-MEMCACHED_MEMORY_LIMIT=$((ram_gb > 4 ? 512 : 256))
-MEMCACHED_CONN_LIMIT=$((cpu_cores * 256))
-MEMCACHED_THREADS=${cpu_cores}
+# Production-proven: 1024MB/8 threads for servers with 8GB+ RAM
+MEMCACHED_MEMORY_LIMIT=$((ram_gb >= 16 ? 1024 : (ram_gb >= 8 ? 768 : (ram_gb > 4 ? 512 : 256))))
+MEMCACHED_CONN_LIMIT=$((cpu_cores * 256 < 1024 ? 1024 : cpu_cores * 256))
+MEMCACHED_THREADS=$((cpu_cores >= 8 ? 8 : cpu_cores))
+MEMCACHED_MAX_ITEM_SIZE=2m
 
 # Backup настройки
 BACKUP_RETENTION_DAYS=$([[ "$environment" == "prod" ]] && echo "30" || echo "7")

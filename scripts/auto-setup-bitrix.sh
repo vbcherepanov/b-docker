@@ -567,11 +567,15 @@ generate_env_params() {
         redis_memory="$((ram * 1024 * 25 / 100))mb"
     fi
 
-    local memcached_memory
+    # Memcached memory (production-proven: 1024MB for 8GB+ RAM)
+    local memcached_memory memcached_threads_val
     if [ "$env" = "local" ]; then
-        memcached_memory=128
+        memcached_memory=256
+        memcached_threads_val=$cpu
     else
-        memcached_memory=$((ram * 512))
+        memcached_memory=$((ram >= 16 ? 1024 : (ram >= 8 ? 768 : ram * 512 / 8)))
+        [ "$memcached_memory" -lt 256 ] && memcached_memory=256
+        memcached_threads_val=$((cpu > 8 ? 8 : cpu))
     fi
 
     local opcache_enable
@@ -623,9 +627,11 @@ MYSQL_MAX_CONNECTIONS=${mysql_connections}
 # Redis оптимизация
 REDIS_MAX_MEMORY=${redis_memory}
 
-# Memcached оптимизация
+# Memcached optimization (production-proven defaults)
 MEMCACHED_MEMORY_LIMIT=${memcached_memory}
-MEMCACHED_THREADS=${cpu}
+MEMCACHED_THREADS=${memcached_threads_val}
+MEMCACHED_CONN_LIMIT=1024
+MEMCACHED_MAX_ITEM_SIZE=2m
 
 # OPcache
 PHP_OPCACHE_ENABLE=${opcache_enable}

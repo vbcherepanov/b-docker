@@ -1,25 +1,24 @@
 FROM memcached:alpine
 
+# Production-proven defaults matching BITRIX-DOCKER reference
 ARG MEMCACHED_CONN_LIMIT=1024
-ARG MEMCACHED_MEMORY_LIMIT=64
-ARG MEMCACHED_THREADS=4
+ARG MEMCACHED_MEMORY_LIMIT=1024
+ARG MEMCACHED_THREADS=8
+ARG MEMCACHED_MAX_ITEM_SIZE=2m
 ARG TZ
 
 ENV TZ=${TZ:-UTC}
 ENV MEMCACHED_CONN_LIMIT=${MEMCACHED_CONN_LIMIT}
 ENV MEMCACHED_MEMORY_LIMIT=${MEMCACHED_MEMORY_LIMIT}
 ENV MEMCACHED_THREADS=${MEMCACHED_THREADS}
+ENV MEMCACHED_MAX_ITEM_SIZE=${MEMCACHED_MAX_ITEM_SIZE}
 
-# Переключаемся на root для установки пакетов
 USER root
 
-# Настройка таймзоны и установка утилит для healthcheck
+# Install timezone and healthcheck utilities
 RUN apk add --no-cache tzdata netcat-openbsd && \
     ln -snf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime && \
     echo ${TZ:-UTC} > /etc/timezone
-
-# Запускаем от root пользователя (временное решение)
-# USER memcached - отключено, так как пользователь не существует в базовом образе
 
 COPY /config/memcached/memcached.conf /etc/memcached.conf
 EXPOSE 11211
@@ -32,4 +31,6 @@ CMD memcached -u root \
               -c ${MEMCACHED_CONN_LIMIT} \
               -p 11211 \
               -l 0.0.0.0 \
-              -t ${MEMCACHED_THREADS}
+              -t ${MEMCACHED_THREADS} \
+              -I ${MEMCACHED_MAX_ITEM_SIZE} \
+              -o modern

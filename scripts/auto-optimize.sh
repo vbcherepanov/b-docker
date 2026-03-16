@@ -411,7 +411,7 @@ generate_redis_config() {
 
     cat > "$output" << EOF
 # ============================================================================
-# Redis Configuration - AUTO OPTIMIZED + SECURITY
+# Redis Configuration - AOF Persistence + Unix Socket
 # Server: ${cpu} CPU, ${ram}GB RAM | Environment: ${env}
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
 # ============================================================================
@@ -421,6 +421,11 @@ generate_redis_config() {
 bind 0.0.0.0
 protected-mode no
 port 6379
+
+# UNIX SOCKET (~30% performance boost for local connections)
+# PHP connects via socket, external tools (redis-exporter) use TCP as fallback
+unixsocket /var/run/redis/redis.sock
+unixsocketperm 777
 
 # Memory - ${maxmem} for ${ram}GB server (${percent}% of RAM)
 maxmemory ${maxmem}
@@ -438,14 +443,20 @@ timeout 0
 tcp-keepalive 300
 tcp-backlog 65535
 
-# Persistence (disable for pure cache)
+# RDB Persistence
 $([[ "$env" == "prod" ]] && echo "save 900 1
 save 300 10
 save 60 10000" || echo "save \"\"")
 
-# AOF
-appendonly $([[ "$env" == "prod" ]] && echo "yes" || echo "no")
+# AOF Persistence (protects sessions from being lost on restart)
+appendonly yes
+appendfilename "appendonly.aof"
 appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+aof-load-truncated yes
+aof-rewrite-incremental-fsync yes
 
 # Logging
 loglevel notice
@@ -465,8 +476,10 @@ active-defrag-ignore-bytes 100mb
 active-defrag-threshold-lower 10
 active-defrag-threshold-upper 100
 
-# Databases - 16 for per-site isolation
+# General
 databases 16
+hz 10
+activerehashing yes
 EOF
 
     log_success "Redis: $output"
@@ -713,6 +726,11 @@ opcache.enable_cli=0
 opcache.consistency_checks=0
 opcache.force_restart_timeout=180
 opcache.blacklist_filename=/etc/php.d/opcache*.blacklist
+
+; JIT settings (PHP 8.0+)
+; Tracing mode provides best performance for long-running applications
+opcache.jit=tracing
+opcache.jit_buffer_size=128M
 EOF
 
     log_success "OPcache: $output"
@@ -855,28 +873,30 @@ update_env_file() {
     mysql_mem_limit="${mysql_mem_limit}M"
     mysql_mem_reservation="${mysql_mem_reservation}M"
 
-    # Memcached (пропорционально RAM)
+    # Memcached (production-proven: 1024MB/8 threads/1024 connections)
     local memcached_mem memcached_threads memcached_conn
     case "$env" in
         local)
-            memcached_mem=$((ram * 1024 / 100))  # 1% RAM
-            [ "$memcached_mem" -lt 64 ] && memcached_mem=64
-            [ "$memcached_mem" -gt 256 ] && memcached_mem=256
-            memcached_threads=$cpu
-            memcached_conn=256
-            ;;
-        dev)
-            memcached_mem=$((ram * 1024 / 100))  # 1% RAM
+            memcached_mem=$((ram * 1024 * 2 / 100))  # 2% RAM
             [ "$memcached_mem" -lt 128 ] && memcached_mem=128
             [ "$memcached_mem" -gt 512 ] && memcached_mem=512
             memcached_threads=$cpu
+            [ "$memcached_threads" -gt 8 ] && memcached_threads=8
             memcached_conn=512
             ;;
-        prod)
-            memcached_mem=$((ram * 1024 * 2 / 100))  # 2% RAM
+        dev)
+            memcached_mem=$((ram * 1024 * 3 / 100))  # 3% RAM
             [ "$memcached_mem" -lt 256 ] && memcached_mem=256
-            [ "$memcached_mem" -gt 2048 ] && memcached_mem=2048
-            memcached_threads=$((cpu * 2))
+            [ "$memcached_mem" -gt 1024 ] && memcached_mem=1024
+            memcached_threads=$cpu
+            [ "$memcached_threads" -gt 8 ] && memcached_threads=8
+            memcached_conn=1024
+            ;;
+        prod)
+            memcached_mem=$((ram * 1024 * 5 / 100))  # 5% RAM
+            [ "$memcached_mem" -lt 512 ] && memcached_mem=512
+            [ "$memcached_mem" -gt 4096 ] && memcached_mem=4096
+            memcached_threads=$((cpu > 8 ? 8 : cpu))
             memcached_conn=1024
             ;;
     esac
@@ -964,8 +984,9 @@ print_report() {
             mysql_buffer=$((available_ram_mb * 25 / 100))
             [ "$mysql_buffer" -lt 128 ] && mysql_buffer=128
             [ "$mysql_buffer" -gt 1024 ] && mysql_buffer=1024
-            memcached_mem=$((ram * 1024 / 100))
-            [ "$memcached_mem" -lt 64 ] && memcached_mem=64
+            memcached_mem=$((ram * 1024 * 2 / 100))
+            [ "$memcached_mem" -lt 128 ] && memcached_mem=128
+            [ "$memcached_mem" -gt 512 ] && memcached_mem=512
             redis_mem=$((ram * 1024 * 2 / 100))
             [ "$redis_mem" -lt 128 ] && redis_mem=128
             php_children=$((cpu * 3))
@@ -973,8 +994,9 @@ print_report() {
         dev)
             mysql_buffer=$((available_ram_mb * 40 / 100))
             [ "$mysql_buffer" -lt 256 ] && mysql_buffer=256
-            memcached_mem=$((ram * 1024 / 100))
-            [ "$memcached_mem" -lt 128 ] && memcached_mem=128
+            memcached_mem=$((ram * 1024 * 3 / 100))
+            [ "$memcached_mem" -lt 256 ] && memcached_mem=256
+            [ "$memcached_mem" -gt 1024 ] && memcached_mem=1024
             redis_mem=$((ram * 1024 * 3 / 100))
             [ "$redis_mem" -lt 256 ] && redis_mem=256
             php_children=$((cpu * 4))
@@ -986,8 +1008,9 @@ print_report() {
             mysql_buffer=$((available_ram_mb * 55 / 100))
             [ "$mysql_buffer" -gt "$max_buffer" ] && mysql_buffer=$max_buffer
             [ "$mysql_buffer" -lt 256 ] && mysql_buffer=256
-            memcached_mem=$((ram * 1024 * 2 / 100))
-            [ "$memcached_mem" -lt 256 ] && memcached_mem=256
+            memcached_mem=$((ram * 1024 * 5 / 100))
+            [ "$memcached_mem" -lt 512 ] && memcached_mem=512
+            [ "$memcached_mem" -gt 4096 ] && memcached_mem=4096
             redis_mem=$((ram * 1024 * 5 / 100))
             [ "$redis_mem" -lt 512 ] && redis_mem=512
             php_children=$((cpu * 8))
