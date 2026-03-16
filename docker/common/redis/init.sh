@@ -13,9 +13,10 @@ sysctl -w vm.overcommit_memory=1 || true
 
 # Ensure socket directory exists with correct permissions
 # This directory is a shared volume between redis and php containers
+# GID 1000 = bitrix user in PHP container, allowing socket access via group
 mkdir -p /var/run/redis
-chown redis:redis /var/run/redis
-chmod 755 /var/run/redis
+chown redis:1000 /var/run/redis
+chmod 770 /var/run/redis
 
 echo "Starting Redis with config..."
 exec redis-server /usr/local/etc/redis/redis.conf

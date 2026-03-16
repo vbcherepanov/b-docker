@@ -467,12 +467,15 @@ set-prod:
 # ============================================================================
 
 ## Split mode: local development
+## NOTE: --scale bitrix=0 prevents the unified bitrix container from starting,
+## avoiding port 9000 conflict with php-fpm (split architecture)
 split-local:
-	$(DOCKER_COMPOSE) --profile local --profile split --profile monitoring up -d --build
+	$(DOCKER_COMPOSE) --profile local --profile split --profile monitoring up -d --build --scale bitrix=0
 
 ## Split mode: production
+## NOTE: --scale bitrix=0 prevents the unified bitrix container from starting
 split-prod:
-	$(DOCKER_COMPOSE) --profile prod --profile split --profile monitoring --profile backup --profile rabbitmq up -d --build
+	$(DOCKER_COMPOSE) --profile prod --profile split --profile monitoring --profile backup --profile rabbitmq up -d --build --scale bitrix=0
 
 ## Split mode: stop
 split-down:
@@ -1251,6 +1254,8 @@ help:
 	@echo "🔄 Автозапуск (systemd):"
 	@echo "  make install-service   - Установить автозапуск"
 	@echo "  make service-status    - Статус сервиса"
+	@echo "  make install-watchdog  - Установить health watchdog (cron)"
+	@echo "  make watchdog-logs     - Логи watchdog"
 	@echo ""
 	@echo "⚙️  Настройка:"
 	@echo "  make auto-config    - Автоконфигурация под сервер"
@@ -1320,6 +1325,18 @@ service-status:
 # Логи сервиса
 service-logs:
 	@sudo journalctl -u bitrix-docker -n 50 -f
+
+# Установить health watchdog cron (проверка контейнеров каждые 5 мин)
+install-watchdog:
+	@sudo ./scripts/install-watchdog-cron.sh install
+
+# Удалить health watchdog cron
+uninstall-watchdog:
+	@sudo ./scripts/install-watchdog-cron.sh remove
+
+# Логи watchdog
+watchdog-logs:
+	@tail -50 /var/log/bitrix-docker-watchdog.log 2>/dev/null || echo "Лог watchdog пуст или не найден"
 
 # === КОМАНДЫ БЕЗОПАСНОСТИ ===
 

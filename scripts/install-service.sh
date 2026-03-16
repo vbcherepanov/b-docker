@@ -103,6 +103,14 @@ install_service() {
 
     log_success "Service enabled for auto-start"
 
+    # Install health watchdog cron
+    log_info "Installing health watchdog cron..."
+    if bash "$SCRIPT_DIR/install-watchdog-cron.sh" install; then
+        log_success "Health watchdog installed (checks every 5 minutes)"
+    else
+        log_warning "Failed to install watchdog cron (non-critical)"
+    fi
+
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
     echo "║  ✅ SERVICE INSTALLED SUCCESSFULLY                         ║"
@@ -156,6 +164,10 @@ uninstall_service() {
     # Disable service
     log_info "Disabling service..."
     systemctl disable "$SERVICE_NAME" 2>/dev/null || true
+
+    # Remove watchdog cron
+    log_info "Removing health watchdog cron..."
+    bash "$SCRIPT_DIR/install-watchdog-cron.sh" remove 2>/dev/null || true
 
     # Remove service file
     log_info "Removing service file..."

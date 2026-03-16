@@ -85,30 +85,30 @@ echo -e "${GREEN}  Directories checked${NC}"
 # ============================================================================
 echo -e "${YELLOW}[2/4] Setting up permissions...${NC}"
 
-# Change ownership of app directory for macOS compatibility
+# Targeted ownership fix (NOT recursive on entire app/ — too slow with upload/)
+# Only fix top-level and writable directories that Bitrix needs
 if [ -d "/home/${UGN}/app" ]; then
-    echo -e "${BLUE}  Changing ownership of /home/${UGN}/app to ${UGN}...${NC}"
-    chown -R "${UGN}:${UGN}" "/home/${UGN}/app" 2>/dev/null || true
-    echo -e "${GREEN}  Ownership changed${NC}"
-fi
+    echo -e "${BLUE}  Setting ownership for key directories...${NC}"
+    chown "${UGN}:${UGN}" "/home/${UGN}/app" 2>/dev/null || true
 
-# Multisite: set permissions for each site's directories
-# 775 instead of 777 for security
-APP_DIR="/home/${UGN}/app"
-if [ -d "$APP_DIR" ]; then
-    for domain_dir in "$APP_DIR"/*/; do
+    for domain_dir in "/home/${UGN}/app"/*/; do
         if [ -d "$domain_dir" ]; then
+            chown "${UGN}:${UGN}" "$domain_dir" 2>/dev/null || true
             site_www="$domain_dir/www"
             if [ -d "$site_www" ]; then
-                for subdir in "upload" "bitrix/cache" "bitrix/managed_cache"; do
-                    target="$site_www/$subdir"
+                chown "${UGN}:${UGN}" "$site_www" 2>/dev/null || true
+                # Only recurse on directories that MUST be writable by PHP
+                for writable in "upload" "bitrix/cache" "bitrix/managed_cache" "local"; do
+                    target="$site_www/$writable"
                     if [ -d "$target" ]; then
+                        chown -R "${UGN}:${UGN}" "$target" 2>/dev/null || true
                         chmod -R 775 "$target" 2>/dev/null || true
                     fi
                 done
             fi
         fi
     done
+    echo -e "${GREEN}  Ownership configured${NC}"
 fi
 
 # Logs must be writable

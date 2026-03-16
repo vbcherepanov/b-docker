@@ -29,8 +29,7 @@ ARG PHP_FPM_MAX_SPARE_SERVERS=35
 ARG PHP_MEMORY_LIMIT=256M
 ARG PHP_UPLOAD_MAX_FILESIZE=64M
 ARG PHP_POST_MAX_SIZE=64M
-# Push server
-ARG PUSH_SECURITY_KEY
+# Push server key is passed via docker-compose environment at runtime only
 
 # ============================================================================
 # ENVIRONMENT VARIABLES
@@ -51,8 +50,7 @@ ENV ENVIRONMENT=${ENVIRONMENT} \
     PHP_FPM_MAX_SPARE_SERVERS=${PHP_FPM_MAX_SPARE_SERVERS} \
     PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT} \
     PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE} \
-    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE} \
-    PUSH_SECURITY_KEY=${PUSH_SECURITY_KEY}
+    PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE}
 
 # Safe shell
 SHELL ["/bin/sh", "-eux", "-o", "pipefail", "-c"]

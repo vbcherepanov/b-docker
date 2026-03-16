@@ -1,634 +1,385 @@
-# Bitrix Docker Multisite Environment
+# B-Docker -- Production-Ready Docker для 1С-Битрикс
 
-Production-ready Docker environment for 1C-Bitrix with full multisite support, per-site isolation, monitoring, and automated management.
+Полнофункциональное Docker-окружение для запуска проектов на 1С-Битрикс с поддержкой мультисайтов, мониторинга, безопасности и автоматических бэкапов.
 
-## Table of Contents
+## Содержание
 
-- [Features](#features)
-- [System Requirements](#system-requirements)
-- [Quick Start](#quick-start)
-- [Architecture](#architecture)
-- [Make Commands Reference](#make-commands-reference)
-- [Multisite Management](#multisite-management)
-- [Per-Site Configuration](#per-site-configuration)
-- [Backup System](#backup-system)
-- [Monitoring](#monitoring)
-- [Security](#security)
+- [Возможности](#возможности)
+- [Быстрый старт](#быстрый-старт)
+- [Архитектура](#архитектура)
+- [Управление сайтами](#управление-сайтами-мультисайт)
+- [Мониторинг](#мониторинг)
+- [Безопасность](#безопасность)
+- [Бэкапы](#бэкапы)
+- [SSL-сертификаты](#ssl-сертификаты)
+- [Почта](#почта)
+- [Push Server](#push-server)
+- [Конфигурация](#конфигурация-env)
+- [Команды Makefile](#команды-makefile)
+- [Структура проекта](#структура-проекта)
+- [Авто-оптимизация](#авто-оптимизация)
+- [Xdebug](#xdebug)
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
 
 ---
 
-## Features
+## Возможности
 
-### Multisite Architecture
-- **Complete site isolation** - each site has its own database, SMTP config, and cron
-- **One-command site management** - `make site-add SITE=shop.local` creates everything
-- **Per-site backups** - backup/restore individual sites or all at once
-- **Domain-based log filtering** - filter logs by domain in Grafana
-
-### Technology Stack
-- **PHP 7.4 / 8.3 / 8.4** - configurable via `.env`
-- **MySQL 8.0 / MariaDB 10.11** - configurable via `.env`
-- **Nginx** - optimized for Bitrix with rate limiting
-- **Redis** - caching and sessions
-- **Memcached** - additional caching layer
-
-### Monitoring & Logging
-- **Grafana** - dashboards and visualization
-- **Prometheus** - metrics collection
-- **Loki** - centralized logging (1 year retention)
-- **Promtail** - log collection with domain labels
-
-### Security
-- **Fail2ban** - brute force protection
-- **ModSecurity WAF** - web application firewall
-- **Rate limiting** - DDoS protection
-- **Security headers** - XSS, CSRF protection
-- **Non-root containers** - enhanced security
-
-### Automation
-- **Auto-optimization** - configures based on server resources
-- **Auto-backup** - scheduled database and file backups
-- **One-command deployment** - `make first-run` sets up everything
+- **Мультисайт** -- изоляция каждого сайта (отдельная БД, SMTP, конфиги)
+- **PHP 7.4 / 8.3 / 8.4** -- двухуровневая сборка образов (базовый + сервисный)
+- **Nginx** с CORS, security headers, rate limiting
+- **MySQL / MariaDB / Percona** -- автоматический выбор по объёму RAM
+- **Redis** -- сессии, кэширование, AOF-персистенция, Unix Socket (~30% прирост)
+- **Memcached** -- дополнительное кэширование
+- **RabbitMQ** -- очереди сообщений (опционально)
+- **Push Server** -- real-time уведомления Битрикс (push-pub + push-sub)
+- **Мониторинг** -- Grafana + Prometheus + Loki + Promtail
+- **7 экспортёров** -- nginx, php-fpm, redis, mysql, memcached, rabbitmq, node
+- **Безопасность** -- Fail2ban (7 jail'ов), ModSecurity WAF, security hardening контейнеров
+- **Бэкапы** -- per-site (БД + файлы), расписание через cron, ротация
+- **SSL** -- самоподписанные сертификаты и Let's Encrypt
+- **Авто-оптимизация** -- автоматическая настройка под ресурсы сервера (RAM/CPU)
+- **Split-архитектура** -- опциональное разделение на 4 PHP-контейнера
+- **OPcache JIT + APCu** -- максимальная производительность PHP
+- **MailHog** -- перехват почты в окружении разработки
+- **Systemd** -- автозапуск контейнеров после перезагрузки сервера
+- **Portainer Agent** -- опциональное удалённое управление
 
 ---
 
-## System Requirements
+## Быстрый старт
 
-### Required Software
+### Требования
 
-| Software | Minimum Version | Check Command |
-|----------|----------------|---------------|
-| **Docker** | 20.10+ | `docker --version` |
-| **Docker Compose** | 2.0+ (V2) | `docker compose version` |
-| **Git** | 2.0+ | `git --version` |
-| **Make** | 3.0+ | `make --version` |
+| Софт                 | Минимальная версия | Проверка                   |
+|----------------------|--------------------|----------------------------|
+| **Docker**           | 24+                | `docker --version`         |
+| **Docker Compose**   | v2                 | `docker compose version`   |
+| **Git**              | 2.0+               | `git --version`            |
+| **Make**             | 3.0+               | `make --version`           |
 
-### Hardware Requirements
+### Рекомендуемые ресурсы сервера
 
-| Resource | Minimum | Recommended | Production |
-|----------|---------|-------------|------------|
-| **CPU** | 2 cores | 4 cores | 8+ cores |
-| **RAM** | 4 GB | 8 GB | 16+ GB |
-| **Disk** | 20 GB | 50 GB | 100+ GB SSD |
+| Ресурс  | Минимум | Рекомендуется | Production |
+|---------|---------|---------------|------------|
+| **CPU** | 2 ядра  | 4 ядра        | 8+ ядер    |
+| **RAM** | 4 ГБ    | 8 ГБ          | 16+ ГБ     |
+| **Диск**| 20 ГБ   | 50 ГБ         | 100+ ГБ SSD|
 
-### Supported Platforms
-
-| Platform | Status | Notes |
-|----------|--------|-------|
-| **Ubuntu 20.04+** | Fully supported | Recommended |
-| **Debian 11+** | Fully supported | |
-| **CentOS 8+** | Fully supported | |
-| **macOS (Intel)** | Fully supported | |
-| **macOS (Apple Silicon)** | Fully supported | ARM64 native |
-| **Windows 10/11** | Supported | Requires WSL 2 |
-
-### Installation on Ubuntu/Debian
+### Установка
 
 ```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
+# 1. Клонировать репозиторий
+git clone <repo-url> && cd b-docker
 
-# Install Docker
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-
-# Install Docker Compose (V2 plugin)
-sudo apt install docker-compose-plugin
-
-# Install Make and Git
-sudo apt install make git -y
-
-# Logout and login to apply docker group
-exit
-```
-
-### Installation on macOS
-
-```bash
-# Install Docker Desktop from https://docker.com/products/docker-desktop
-# Or via Homebrew:
-brew install --cask docker
-
-# Install Make (included in Xcode Command Line Tools)
-xcode-select --install
-
-# Install Git
-brew install git
-```
-
-### Installation on Windows (WSL 2)
-
-```powershell
-# Enable WSL 2
-wsl --install
-
-# Install Ubuntu from Microsoft Store
-# Then follow Ubuntu installation steps above
-```
-
----
-
-## Quick Start
-
-### 1. Clone Repository
-
-```bash
-git clone <your-repo-url> b-docker
-cd b-docker
-```
-
-### 2. Initial Setup
-
-```bash
-# Full automated setup (generates secrets, optimizes configs, validates)
+# 2. Полная подготовка окружения (генерация паролей, оптимизация, валидация)
 make setup
-```
 
-### 3. First Run
-
-```bash
-# For local development
+# 3. Полная инициализация с нуля (setup + build + запуск)
 make first-run
-
-# For production
-make first-run-prod
 ```
 
-### 4. Add Your First Site
+После завершения `first-run` доступны:
+
+| Сервис   | URL                           |
+|----------|-------------------------------|
+| Сайт     | `http://bitrix.local`         |
+| MailHog  | `http://bitrix.local:8025`    |
+| Grafana  | `http://grafana.bitrix.local` |
+
+> Не забудьте добавить домен в `/etc/hosts`:
+> ```
+> 127.0.0.1 bitrix.local www.bitrix.local grafana.bitrix.local
+> ```
+
+### Окружения
 
 ```bash
-# Add site (creates directories, nginx config, database, per-site configs)
-make site-add SITE=mysite.local
-
-# Add to /etc/hosts
-echo "127.0.0.1 mysite.local www.mysite.local" | sudo tee -a /etc/hosts
+make local          # Разработка (+ MailHog, Xdebug, Push, Monitoring)
+make dev            # Тестовый сервер (+ Push, Monitoring)
+make prod           # Production (+ Backup, RabbitMQ, Monitoring, Push)
 ```
 
-### 5. Access Your Site
+Управление:
 
-- **Site**: http://mysite.local
-- **MailHog**: http://localhost:8025 (local dev)
-- **Grafana**: http://localhost:3000
-
----
-
-## Architecture
-
-### Directory Structure
-
-```
-b-docker/
-├── docker-compose.bitrix.yml     # Main compose file
-├── Makefile                      # All management commands
-├── .env                          # Active configuration
-│
-├── www/                          # Sites root (multisite)
-│   ├── shop.local/
-│   │   └── www/                  # Document root
-│   │       ├── index.php
-│   │       ├── bitrix/
-│   │       └── upload/
-│   └── blog.local/
-│       └── www/
-│
-├── config/
-│   ├── sites/                    # Per-site configurations
-│   │   ├── _template/            # Templates for new sites
-│   │   │   ├── site.env.template
-│   │   │   ├── database-init.sql.template
-│   │   │   └── msmtp.conf.template
-│   │   ├── shop.local/
-│   │   │   ├── site.env          # DB credentials
-│   │   │   ├── database-init.sql # SQL for DB creation
-│   │   │   └── msmtp.conf        # SMTP config
-│   │   └── blog.local/
-│   │       └── ...
-│   ├── nginx/
-│   │   └── sites/                # Nginx configs per site
-│   ├── cron/                     # Multisite cron
-│   ├── mysql/                    # MySQL configs
-│   ├── redis/                    # Redis config
-│   ├── grafana/                  # Grafana dashboards
-│   ├── prometheus/               # Prometheus rules
-│   ├── loki/                     # Loki config
-│   └── promtail/                 # Promtail with domain labels
-│
-├── docker/
-│   ├── php/
-│   │   ├── base/                 # Base PHP images
-│   │   └── bitrix/               # Bitrix container
-│   ├── nginx/
-│   ├── mysql/
-│   └── ...
-│
-├── backups/                      # Backup storage
-│   ├── database/                 # DB backups per site
-│   ├── files/                    # File backups per site
-│   └── full/                     # Full backups (DB + files)
-│
-├── volume/                       # Persistent data
-│   ├── logs/                     # All logs
-│   ├── mysql/                    # MySQL data
-│   └── grafana/                  # Grafana data
-│
-├── ssl/                          # SSL certificates
-└── scripts/                      # Utility scripts
+```bash
+make local-down     # Остановить
+make local-restart  # Перезапустить
+make local-logs     # Логи всех контейнеров
+make local-ps       # Статус контейнеров
 ```
 
-### Container Architecture
+### Production: первый запуск
 
-```
-                    Internet
-                       │
-                       ▼
-              ┌────────────────┐
-              │     Nginx      │ :80/:443
-              │  (reverse proxy)│
-              └───────┬────────┘
-                      │
-        ┌─────────────┼─────────────┐
-        │             │             │
-        ▼             ▼             ▼
-  ┌──────────┐  ┌──────────┐  ┌──────────┐
-  │ PHP-FPM  │  │ PHP-FPM  │  │ PHP-FPM  │
-  │ shop.local│  │blog.local│  │ api.local│
-  └────┬─────┘  └────┬─────┘  └────┬─────┘
-       │             │             │
-       └─────────────┼─────────────┘
-                     │
-        ┌────────────┼────────────┐
-        │            │            │
-        ▼            ▼            ▼
-  ┌──────────┐ ┌──────────┐ ┌──────────┐
-  │  MySQL   │ │  Redis   │ │Memcached │
-  │(per-site │ │ (shared) │ │ (shared) │
-  │   DBs)   │ │          │ │          │
-  └──────────┘ └──────────┘ └──────────┘
+```bash
+make first-run-prod        # Полная инициализация для production
+sudo make install-service  # Автозапуск через systemd
 ```
 
 ---
 
-## Make Commands Reference
+## Архитектура
 
-### Quick Start Commands
+### Unified mode (по умолчанию)
 
-```bash
-make setup              # Prepare environment (secrets, optimization, validation)
-make first-run          # Full initialization from scratch (local)
-make first-run-prod     # Full initialization for production
-make quick-start        # Quick start without full setup
+Один контейнер `bitrix` с Supervisor, управляющий PHP-FPM + Cron + фоновыми воркерами.
+
+```
+                    ┌─────────────────┐
+                    │     nginx       │
+                    │  (80 / 443)     │
+                    └────────┬────────┘
+                             │ FastCGI
+                    ┌────────▼────────┐
+                    │     bitrix      │
+                    │  PHP-FPM + Cron │
+                    │  + Supervisor   │
+                    └───┬────┬────┬───┘
+                        │    │    │
+               ┌────────▼┐ ┌▼────▼────┐
+               │  MySQL  │ │  Redis   │
+               └─────────┘ └──────────┘
+                        │
+                  ┌─────▼──────┐
+                  │ Memcached  │
+                  └────────────┘
 ```
 
-### Environment Management
+### Split mode (опционально)
+
+4 отдельных контейнера для максимальной изоляции и масштабируемости:
+
+| Контейнер    | Назначение                                     |
+|--------------|------------------------------------------------|
+| `php-fpm`    | Обработка HTTP-запросов через FastCGI           |
+| `php-cli`    | CLI-операции, composer, миграции                |
+| `cron`       | Периодические задачи (агенты Битрикс, crontab) |
+| `supervisor` | Фоновые воркеры (очереди, long-running)         |
 
 ```bash
-# Local development (with MySQL, Redis, MailHog, monitoring)
-make local              # Start
-make local-down         # Stop
-make local-restart      # Restart
-make local-logs         # View logs
-make local-ps           # Container status
+# Переключение на split mode:
+# 1. В .env установите: PHP_FPM_HOST=php-fpm
+# 2. Запустите:
 
-# Development server
-make dev                # Start
-make dev-down           # Stop
-make dev-restart        # Restart
-make dev-logs           # View logs
-
-# Production (with monitoring, backup, RabbitMQ)
-make prod               # Start
-make prod-down          # Stop
-make prod-restart       # Restart
-make prod-logs          # View logs
+make split-local        # Разработка в split mode
+make split-prod         # Production в split mode
+make split-down         # Остановить
+make split-ps           # Статус
+make split-logs         # Логи
 ```
 
-### Site Management (Multisite)
+### Двухуровневые PHP-образы
+
+Сборка разделена на два уровня для ускорения:
+
+1. **Базовые образы** (`my/php-base-fpm:8.3`, `my/php-base-cli:8.3`) -- все PHP-расширения, собираются редко
+2. **Сервисные образы** -- наследуют базовые, добавляют конфиги, собираются быстро
 
 ```bash
-# Add site (FULL AUTOMATION)
-make site-add SITE=shop.local              # Basic site
-make site-add SITE=shop.local SSL=yes      # With self-signed SSL
-make site-add SITE=shop.local SSL=letsencrypt  # With Let's Encrypt
-make site-add SITE=shop.local PHP=8.4      # With specific PHP version
-
-# What site-add does automatically:
-# 1. Creates www/{site}/www/ directories
-# 2. Creates nginx config
-# 3. Generates per-site configs (DB credentials, SMTP)
-# 4. Creates database and MySQL user
-# 5. Reloads nginx
-
-# Remove site (COMPLETE REMOVAL)
-make site-remove SITE=shop.local           # Removes files, configs, DB
-
-# Site information
-make site-list                             # List all sites
-make site-reload                           # Reload nginx
-
-# SSL management
-make site-ssl SITE=shop.local              # Generate self-signed SSL
-make site-ssl-le SITE=shop.local           # Get Let's Encrypt certificate
-
-# Database management
-make db-list-sites                         # List all per-site databases
-make db-init-site SITE=shop.local          # Manually create DB for site
+make build-base         # Собрать оба базовых образа
+make build-base-cli     # Только CLI
+make build-base-fpm     # Только FPM
 ```
 
-### Backup System (Per-Site)
+### PHP-расширения
+
+bcmath, bz2, exif, gettext, gmp, intl, mysqli, opcache, pdo_mysql, pcntl, sockets, sysvmsg, sysvsem, sysvshm, xsl, zip, curl, gd, ldap, imagick, amqp, apcu, zstd, msgpack, mongodb, redis, rdkafka, ssh2, yaml, igbinary, memcached, memcache, lz4
+
+Условные: **xdebug** (при `DEBUG=1`), **mhsendmail** (при `ENVIRONMENT=local|dev`)
+
+---
+
+## Управление сайтами (мультисайт)
+
+### Добавление сайта
 
 ```bash
-# Information
-make backup-sites                          # List sites available for backup
-make backup-list                           # List all backups
-make backup-list-db                        # List database backups
-make backup-list-files                     # List file backups
+make site-add SITE=shop.local                 # Базовое добавление
+make site-add SITE=shop.local SSL=yes         # + самоподписанный SSL
+make site-add SITE=prod.com SSL=letsencrypt   # + Let's Encrypt
+make site-add SITE=api.local PHP=8.4          # + конкретная версия PHP
+```
 
-# Create backups
-make backup-db                             # Backup all site databases
-make backup-db SITE=shop.local             # Backup single site DB
-make backup-files                          # Backup all site files
-make backup-files SITE=shop.local          # Backup single site files
-make backup-full                           # Full backup (DB + files) all sites
-make backup-full SITE=shop.local           # Full backup single site
+Автоматически создаётся:
+- Директория `www/shop.local/www/` (document root)
+- Nginx-конфиг `config/nginx/sites/shop.local.conf`
+- Per-site конфиги `config/sites/shop.local/` (site.env, msmtp.conf, database-init.sql)
+- База данных и пользователь MySQL
+- Перезагрузка nginx
 
-# Restore backups
+### Другие операции
+
+```bash
+make site-list                                # Список всех сайтов
+make site-remove SITE=old.local               # Полное удаление (файлы + БД + конфиги)
+make site-ssl SITE=shop.local                 # Самоподписанный SSL
+make site-ssl-le SITE=prod.com                # Let's Encrypt сертификат
+make site-reload                              # Перезагрузить nginx
+make site-clone FROM=source.com TO=target.com # Клонировать сайт
+```
+
+### База данных
+
+```bash
+make db-init SITE=shop.local      # Создать БД для сайта
+make db-init-all                  # Создать БД для всех сайтов
+make db-list-sites                # Список per-site баз данных
+```
+
+### Структура файлов мультисайта
+
+```
+www/
+└── shop.local/
+    └── www/                  <-- Document root
+        ├── index.php
+        ├── bitrix/
+        └── upload/
+
+config/sites/
+└── shop.local/
+    ├── site.env              <-- DB credentials (DB_NAME, DB_USER, DB_PASSWORD)
+    ├── msmtp.conf            <-- Per-site SMTP настройки
+    └── database-init.sql     <-- SQL для создания БД и пользователя
+```
+
+> После добавления сайта добавьте запись в `/etc/hosts`:
+> ```
+> 127.0.0.1 shop.local www.shop.local
+> ```
+
+---
+
+## Мониторинг
+
+Стек мониторинга включается автоматически при запуске `make local`, `make dev` или `make prod`.
+
+### Компоненты
+
+| Компонент          | Назначение                          | Доступ                            |
+|--------------------|-------------------------------------|-----------------------------------|
+| **Grafana**        | Дашборды и визуализация             | `http://grafana.{DOMAIN}`         |
+| **Prometheus**     | Сбор и хранение метрик              | `http://prometheus.{DOMAIN}`      |
+| **Loki**           | Агрегация логов                     | Внутренний (порт 3100)            |
+| **Promtail**       | Сбор логов из контейнеров           | Внутренний                        |
+| **Node Exporter**  | Метрики хоста (CPU, RAM, диск)      | Внутренний (порт 9100)            |
+
+### Экспортёры
+
+| Экспортёр              | Метрики                                  |
+|------------------------|------------------------------------------|
+| `nginx-exporter`       | Запросы, соединения, статусы             |
+| `php-fpm-exporter`     | Воркеры, очередь, медленные запросы      |
+| `redis-exporter`       | Память, ключи, hit/miss ratio            |
+| `mysql-exporter`       | InnoDB, соединения, запросы, репликация   |
+| `memcached-exporter`   | Hit/miss, память, evictions              |
+| `rabbitmq-exporter`    | Очереди, сообщения, потребители          |
+| `node-exporter`        | CPU, RAM, диск, сеть хоста               |
+
+### Готовые дашборды Grafana
+
+- Security Dashboard
+- Nginx Security Dashboard
+- PHP Errors Dashboard
+
+### Управление
+
+```bash
+make monitoring-up          # Включить мониторинг
+make monitoring-down        # Выключить мониторинг
+make logs-grafana           # Логи Grafana
+```
+
+---
+
+## Безопасность
+
+### Fail2ban -- 7 jail'ов
+
+| Jail               | Защита от                          |
+|--------------------|------------------------------------|
+| `nginx-req-limit`  | Превышение rate limit              |
+| `nginx-403`        | Массовые 403 (сканирование)        |
+| `nginx-404`        | Массовые 404 (поиск уязвимостей)   |
+| `nginx-botsearch`  | Сканирование ботами                |
+| `nginx-brute`      | Brute force атаки                  |
+| `nginx-sqli`       | SQL Injection попытки              |
+| `nginx-xss`        | XSS атаки                         |
+
+### Команды безопасности
+
+```bash
+make security-up              # Запуск Fail2ban
+make security-up-full         # Fail2ban + ModSecurity WAF
+make security-down            # Остановить
+make security-restart         # Перезапустить
+make security-status          # Статус
+
+# Управление Fail2ban
+make fail2ban-status          # Статус
+make fail2ban-jails           # Список jail'ов
+make fail2ban-banned          # Заблокированные IP
+make fail2ban-unban IP=1.2.3.4  # Разблокировать IP
+make fail2ban-ban IP=1.2.3.4    # Заблокировать IP
+
+# Статистика
+make security-attacks         # Последние атаки
+make security-stats           # Статистика (403, 404, 429, баны)
+make security-test            # Проверка конфигурации
+```
+
+### Hardening контейнеров
+
+Все контейнеры защищены по рекомендациям Bitrix official:
+
+- `no-new-privileges: true` -- запрет повышения привилегий
+- `cap_drop: ALL` -- сброс всех Linux capabilities
+- Минимальные `cap_add` для каждого сервиса
+- `tmpfs` с `noexec,nodev,nosuid` для `/tmp` и `/var/tmp`
+- JSON logging с ротацией (10MB x 3 файла на контейнер)
+- Health checks для всех сервисов
+
+---
+
+## Бэкапы
+
+### Per-site бэкапы
+
+```bash
+# Информация
+make backup-sites                              # Список сайтов для бэкапа
+make backup-list                               # Все бэкапы
+make backup-list-db                            # Только БД
+make backup-list-files                         # Только файлы
+
+# Создание
+make backup-db                                 # БД всех сайтов
+make backup-db SITE=shop.local                 # БД одного сайта
+make backup-files                              # Файлы всех сайтов
+make backup-files SITE=shop.local              # Файлы одного сайта
+make backup-full                               # Полный бэкап всех сайтов
+make backup-full SITE=shop.local               # Полный бэкап одного сайта
+
+# Восстановление
 make backup-restore-db FILE=backups/database/shop_local_20260118.sql.gz
 make backup-restore-db FILE=backup.sql.gz SITE=shop.local
 make backup-restore-files FILE=backups/files/shop_local_20260118.tar.gz
-make backup-restore-files FILE=backup.tar.gz SITE=shop.local
 make backup-restore-full DIR=backups/full/shop_local_20260118_120000
 
-# Maintenance
-make backup-cleanup                        # Remove old backups
+# Очистка
+make backup-cleanup                            # Удалить старые бэкапы
 ```
 
-### Security
-
-```bash
-# Security services
-make security-up                           # Start Fail2ban
-make security-up-full                      # Start Fail2ban + ModSecurity
-make security-down                         # Stop security services
-make security-restart                      # Restart security services
-make security-status                       # Status of security services
-
-# Fail2ban management
-make fail2ban-status                       # Fail2ban status
-make fail2ban-jails                        # List all jails
-make fail2ban-banned                       # List banned IPs
-make fail2ban-unban IP=192.168.1.100       # Unban IP
-make fail2ban-ban IP=192.168.1.100         # Ban IP
-
-# Monitoring & stats
-make security-logs                         # Fail2ban logs
-make security-attacks                      # Recent attacks
-make security-stats                        # Security statistics
-make security-test                         # Test configuration
-```
-
-### Monitoring
-
-```bash
-# Monitoring stack
-make monitoring-up                         # Start Grafana, Prometheus, Loki
-make monitoring-up-prod                    # Start for production
-make monitoring-down                       # Stop monitoring
-
-# Portainer (container management UI)
-make portainer-up                          # Start Portainer
-make portainer-down                        # Stop Portainer
-```
-
-### Logs
-
-```bash
-make logs-nginx                            # Nginx logs
-make logs-nginx-local                      # Nginx logs (local)
-make logs-php                              # PHP-FPM logs
-make logs-php-local                        # PHP-FPM logs (local)
-make logs-mysql                            # MySQL logs
-make logs-grafana                          # Grafana logs
-make logs-backup                           # Backup logs
-```
-
-### Container Access
-
-```bash
-make bash_cli                              # PHP CLI shell
-make bash_cli_local                        # PHP CLI shell (local)
-make bash_nginx                            # Nginx shell
-make bash_local_nginx                      # Nginx shell (local)
-```
-
-### Nginx Management
-
-```bash
-make check_nginx                           # Test nginx config
-make check_local_nginx                     # Test nginx config (local)
-make reload_nginx                          # Reload nginx
-make reload_local_nginx                    # Reload nginx (local)
-```
-
-### Database
-
-```bash
-make create_dump                           # Create DB dump
-make create_dump_local                     # Create DB dump (local)
-make restore_dump                          # Restore DB dump
-make restore_local_dump                    # Restore DB dump (local)
-```
-
-### Build & Clean
-
-```bash
-make build-base                            # Build base PHP images
-make build-base-cli                        # Build PHP CLI base
-make build-base-fpm                        # Build PHP FPM base
-make docker-network-create                 # Create Docker network
-
-make clean-volumes                         # Clean Docker volumes
-make clean-images                          # Clean Docker images
-make clean-all                             # Clean everything
-make disk-usage                            # Show disk usage
-```
-
-### Configuration
-
-```bash
-make setup                                 # Full environment setup
-make validate                              # Validate .env file
-make auto-config                           # Auto-configure for current hardware
-make auto-config-force                     # Force reconfigure
-make auto-config-prod                      # Configure for production
-make auto-config-preview                   # Preview configuration changes
-make auto-config-manual CPU_CORES=8 RAM_GB=16  # Manual configuration
-```
-
-#### Auto-Optimize Details
-
-The `auto-config` command automatically calculates optimal values based on your server:
-
-| Component | Formula |
-|-----------|---------|
-| **MySQL buffer_pool** | 25-60% of RAM (depends on environment) |
-| **MySQL max_connections** | Min 200 for multisite |
-| **MySQL io_capacity** | 2000-4000 (SSD optimized) |
-| **Redis maxmemory** | 2-5% of RAM |
-| **PHP-FPM max_children** | CPU × 3-8 (depends on environment) |
-| **PHP-FPM max_requests** | 500-1000 |
-| **Memcached memory** | 1-2% of RAM |
-| **Nginx workers** | Number of CPU cores |
-
-Example for 12 CPU / 64GB RAM server:
-```
-MySQL buffer_pool:     16GB (local) / 38GB (prod)
-Redis maxmemory:       1GB (local) / 3GB (prod)
-PHP-FPM max_children:  36 (local) / 100 (prod)
-Memcached memory:      512MB
-```
-
-### Help
-
-```bash
-make help                                  # Main help
-make help-quick                            # Quick reference
-make help-sites                            # Site management help
-make help-backup                           # Backup system help
-make help-security                         # Security help
-make help-autoconfig                       # Auto-configuration help
-```
-
----
-
-## Multisite Management
-
-### Adding a New Site
-
-```bash
-# Simple command creates everything
-make site-add SITE=shop.local
-```
-
-This command automatically:
-1. Creates directory structure: `www/shop.local/www/`
-2. Generates nginx configuration
-3. Creates per-site configs with unique DB credentials
-4. Creates MySQL database and user
-5. Reloads nginx
-
-### Site Structure
-
-After adding a site, you get:
-
-```
-www/shop.local/
-└── www/                          # Document root
-    ├── index.php                 # Test page
-    ├── bitrix/                   # Bitrix core (install here)
-    │   ├── cache/
-    │   └── managed_cache/
-    ├── upload/                   # User uploads
-    └── local/                    # Custom code
-
-config/sites/shop.local/
-├── site.env                      # Database credentials
-├── database-init.sql             # SQL for DB creation
-└── msmtp.conf                    # SMTP configuration
-
-config/nginx/sites/shop.local.conf  # Nginx config
-```
-
-### Removing a Site
-
-```bash
-# Removes everything: files, configs, database
-make site-remove SITE=shop.local
-```
-
-### Listing Sites
-
-```bash
-make site-list
-```
-
----
-
-## Per-Site Configuration
-
-Each site has isolated configuration:
-
-### Database Isolation
-
-Every site gets its own MySQL database and user:
-
-```bash
-# config/sites/shop.local/site.env
-DB_NAME=shop_local
-DB_USER=shop_local_user
-DB_PASSWORD=<auto-generated-secure-password>
-```
-
-### SMTP Configuration
-
-Per-site email routing:
-
-```bash
-# config/sites/shop.local/msmtp.conf
-account shop_local
-host mailhog
-port 1025
-from noreply@shop.local
-```
-
-### Cron (Multisite)
-
-Single cron dispatcher handles all sites:
-
-```bash
-# Runs Bitrix agents for each site automatically
-* * * * * /usr/local/bin/scripts/multisite-cron.sh agents
-```
-
-### Logs with Domain Labels
-
-All logs are automatically labeled with the `domain` for easy filtering in Grafana:
-
-| Service | Domain Source |
-|---------|---------------|
-| **Nginx** | From log filename: `shop.local.access.log` |
-| **PHP-FPM** | From SCRIPT_FILENAME: `/home/bitrix/app/shop.local/www/` |
-| **Cron** | From log format: `[shop.local]` |
-| **MSMTP** | From log filename: `shop.local.log` |
-
-**Grafana LogQL queries:**
-
-```logql
-# Nginx logs for specific domain
-{job="nginx", domain="shop.local"}
-
-# PHP errors for specific domain
-{job="php-fpm", domain="api.local"} |= "error"
-
-# All cron logs
-{job="cron", domain=~".*"}
-
-# Nginx 5xx errors across all domains
-{job="nginx"} | json | status >= 500
-
-# Filter by multiple domains
-{job="nginx", domain=~"shop.local|blog.local"}
-
-# Slow PHP requests (from slow log)
-{job="php-fpm"} |= "pool www"
-```
-
----
-
-## Backup System
-
-### Backup Structure
+### Автоматическое расписание (production)
+
+| Задача        | Расписание          | Переменная               |
+|---------------|---------------------|--------------------------|
+| Бэкап БД      | Ежедневно в 02:00   | `BACKUP_SCHEDULE_DB`     |
+| Бэкап файлов  | Ежедневно в 03:00   | `BACKUP_SCHEDULE_FILES`  |
+| Retention      | 7 дней              | `BACKUP_RETENTION_DAYS`  |
+
+### Структура бэкапов
 
 ```
 backups/
@@ -645,248 +396,625 @@ backups/
         └── manifest.txt
 ```
 
-### Per-Site Backups
-
-```bash
-# Backup single site
-make backup-full SITE=shop.local
-
-# Backup all sites
-make backup-full
-
-# List available sites
-make backup-sites
-```
-
-### Restore
-
-```bash
-# Restore database
-make backup-restore-db FILE=backups/database/shop_local_20260118.sql.gz SITE=shop.local
-
-# Restore files
-make backup-restore-files FILE=backups/files/shop_local_20260118.tar.gz SITE=shop.local
-
-# Restore full backup
-make backup-restore-full DIR=backups/full/shop_local_20260118_120000 SITE=shop.local
-```
-
-### Automatic Cleanup
-
-```bash
-# Remove backups older than BACKUP_RETENTION_DAYS (default: 7)
-make backup-cleanup
-```
-
 ---
 
-## Monitoring
+## SSL-сертификаты
 
-### Grafana
+### Режимы SSL (переменная `SSL` в `.env`)
 
-**URL**: http://localhost:3000
-**Default credentials**: admin / (from `.env` GRAFANA_ADMIN_PASSWORD)
+| Значение | Описание                                              |
+|----------|-------------------------------------------------------|
+| `0`      | Без SSL (только HTTP)                                 |
+| `self`   | Свои сертификаты (положить в `config/nginx/ssl/`)     |
+| `free`   | Let's Encrypt (автогенерация и автопродление)         |
 
-**Available Dashboards**:
-- System Metrics - CPU, RAM, Disk
-- Nginx Analytics - requests, errors, response times
-- MySQL Performance - queries, connections, slow queries
-- Redis Stats - cache hits, memory usage
-- Security Dashboard - blocked IPs, attack patterns
-
-### Log Search (Grafana Explore)
-
-```logql
-# === By Service ===
-{job="nginx"}                              # All nginx logs
-{job="php-fpm"}                            # PHP-FPM logs
-{job="mysql"}                              # MySQL logs
-{job="cron"}                               # Multisite cron logs
-
-# === By Domain (Multisite) ===
-{job="nginx", domain="shop.local"}         # Nginx for specific site
-{job="php-fpm", domain="api.local"}        # PHP for specific site
-{domain="shop.local"}                      # All logs for domain
-{domain=~"shop.*"}                         # Regex match domains
-
-# === Error Filtering ===
-{job="nginx"} | json | status >= 400       # HTTP errors
-{job="php-fpm"} |= "error"                 # PHP errors
-{job="php-fpm"} |= "Fatal"                 # Fatal PHP errors
-{job="mysql"} |= "slow"                    # Slow queries
-
-# === Security ===
-{job="fail2ban"} |= "Ban"                  # Blocked IPs
-{job="modsecurity"} |= "Warning"           # WAF alerts
-{job="nginx"} |= "403"                     # Forbidden requests
-
-# === Performance ===
-{job="php-fpm"} |= "pool www"              # Slow PHP requests
-{job="nginx"} | json | request_time > 1    # Slow HTTP requests
-```
-
-### Prometheus Metrics
-
-**URL**: http://localhost:9090
-
-Available metrics:
-- Container metrics (cAdvisor)
-- Nginx metrics (nginx-exporter)
-- MySQL metrics (mysqld-exporter)
-- Redis metrics (redis-exporter)
-
----
-
-## Security
-
-### Fail2ban Protection
-
-Automatically blocks IPs after:
-- 5 failed login attempts
-- Excessive 404 errors
-- SQL injection attempts
-- XSS attempts
+### Самоподписанный сертификат
 
 ```bash
-# Check banned IPs
-make fail2ban-banned
-
-# Unban IP
-make fail2ban-unban IP=192.168.1.100
-```
-
-### Rate Limiting
-
-Nginx rate limits:
-- Login/Admin: 5 req/min
-- API: 10 req/sec
-- Static: 30 req/sec
-- General: 2 req/sec
-
-### Security Headers
-
-Automatically applied:
-- `X-Frame-Options: SAMEORIGIN`
-- `X-Content-Type-Options: nosniff`
-- `X-XSS-Protection: 1; mode=block`
-- `Referrer-Policy: no-referrer-when-downgrade`
-
-### SSL/TLS
-
-```bash
-# Self-signed (development)
 make site-ssl SITE=shop.local
-
-# Let's Encrypt (production)
-make site-ssl-le SITE=shop.local
+# Или при добавлении сайта:
+make site-add SITE=shop.local SSL=yes
 ```
+
+### Let's Encrypt
+
+```bash
+make site-ssl-le SITE=prod.com
+# Или при добавлении сайта:
+make site-add SITE=prod.com SSL=letsencrypt
+```
+
+---
+
+## Почта
+
+### Разработка -- MailHog
+
+В окружениях `local` и `dev` автоматически запускается MailHog:
+
+- **SMTP**: порт `1025`
+- **Web UI**: `http://{DOMAIN}:8025`
+
+Все исходящие письма перехватываются и доступны через web-интерфейс.
+
+### Production -- MSMTP
+
+Каждый сайт может иметь собственную SMTP-конфигурацию:
+
+```
+config/sites/shop.local/msmtp.conf
+```
+
+Пример настройки для продакшн:
+
+```
+account shop_local
+host smtp.your-provider.com
+port 587
+from noreply@shop.local
+auth on
+user your-smtp-user
+password your-smtp-password
+tls on
+```
+
+Шаблон: `config/sites/_template/msmtp.conf.template`
+
+---
+
+## Push Server
+
+Real-time уведомления Битрикс: чат, живая лента, мгновенные уведомления.
+
+Используется официальный образ `quay.io/bitrix24/push:3.2-v1-alpine`.
+
+| Сервис      | Назначение                              | Порт  |
+|-------------|------------------------------------------|-------|
+| `push-sub`  | Подписки клиентов (WebSocket)            | 8010  |
+| `push-pub`  | Публикация событий (PHP -> Push Server)  | 9010  |
+
+Настройка в `.env`:
+
+```env
+PUSH_SECURITY_KEY=<секретный ключ>   # openssl rand -hex 32
+PUSH_PUB_PORT=9010
+PUSH_SUB_PORT=8010
+```
+
+Push Server включается автоматически во всех окружениях (`make local`, `make dev`, `make prod`).
+
+---
+
+## Конфигурация (.env)
+
+### Основные настройки
+
+| Переменная               | Описание                            | По умолчанию         |
+|--------------------------|-------------------------------------|----------------------|
+| `COMPOSE_PROJECT_NAME`   | Имя проекта Docker Compose          | `bitrix`             |
+| `ENVIRONMENT`            | Окружение: `local`, `dev`, `prod`   | `local`              |
+| `DOMAIN`                 | Основной домен сайта                | `bitrix.local`       |
+| `TZ`                     | Временная зона                      | `Europe/Moscow`      |
+| `DEBUG`                  | Режим отладки (1 = Xdebug)         | `1`                  |
+| `UID` / `GID`            | ID пользователя/группы              | `1000`               |
+
+### PHP
+
+| Переменная                  | Описание                     | По умолчанию |
+|-----------------------------|------------------------------|--------------|
+| `PHP_VERSION`               | Версия PHP: 7.4, 8.3, 8.4   | `8.3`        |
+| `PHP_MEMORY_LIMIT`          | Лимит памяти                 | `512M`       |
+| `PHP_UPLOAD_MAX_FILESIZE`   | Макс. размер загрузки        | `1024M`      |
+| `PHP_POST_MAX_SIZE`         | Макс. размер POST            | `1024M`      |
+| `PHP_MAX_EXECUTION_TIME`    | Макс. время выполнения (с)   | `300`        |
+| `PHP_FPM_PM`               | Режим FPM                    | `dynamic`    |
+| `PHP_FPM_MAX_CHILDREN`      | Макс. воркеров FPM           | `12`         |
+| `PHP_OPCACHE_ENABLE`        | OPcache (0=off, 1=on)        | `0` (local)  |
+| `PHP_OPCACHE_MEMORY`        | Память OPcache (MB)          | `256`        |
+| `PHP_OPCACHE_MAX_FILES`     | Макс. файлов в кэше          | `100000`     |
+
+### База данных
+
+| Переменная                       | Описание                          | По умолчанию      |
+|----------------------------------|-----------------------------------|--------------------|
+| `MYSQL_IMAGE`                    | Образ БД                          | `mariadb:10.11`   |
+| `DB_NAME`                        | Имя базы данных                   | `bitrix`          |
+| `DB_USERNAME`                    | Пользователь БД                   | `bitrix`          |
+| `DB_PASSWORD`                    | Пароль                            | генерируется      |
+| `DB_ROOT_PASSWORD`               | Root-пароль                       | генерируется      |
+| `MYSQL_INNODB_BUFFER_POOL_SIZE`  | Размер buffer pool                | `1G`              |
+| `MYSQL_MAX_CONNECTIONS`          | Макс. подключений                 | `50`              |
+| `MYSQL_MEMORY_LIMIT`            | Лимит памяти контейнера           | `2G`              |
+
+**Рекомендации по выбору `MYSQL_IMAGE`:**
+
+| RAM сервера | Образ                                                  |
+|-------------|--------------------------------------------------------|
+| < 4 ГБ     | `mariadb:10.11` (по умолчанию, низкое потребление)      |
+| 4-16 ГБ    | `quay.io/bitrix24/percona-server:8.0.44-v1-rhel` (Bitrix official) |
+| > 16 ГБ    | `quay.io/bitrix24/percona-server:8.4.7-v1-rhel`        |
+
+### Redis и Memcached
+
+| Переменная               | Описание               | По умолчанию |
+|--------------------------|------------------------|--------------|
+| `REDIS_MAX_MEMORY`       | Лимит памяти Redis     | `128mb`      |
+| `REDIS_PASSWORD`         | Пароль Redis           | генерируется |
+| `MEMCACHED_MEMORY_LIMIT` | Лимит памяти (MB)      | `1024`       |
+| `MEMCACHED_THREADS`      | Потоков Memcached       | `8`          |
+| `MEMCACHED_CONN_LIMIT`   | Лимит соединений       | `1024`       |
+
+### RabbitMQ
+
+| Переменная               | Описание               | По умолчанию |
+|--------------------------|------------------------|--------------|
+| `RABBITMQ_DEFAULT_USER`  | Логин                  | `admin`      |
+| `RABBITMQ_DEFAULT_PASS`  | Пароль                 | генерируется |
+| `RABBIT_PORT`            | AMQP порт              | `5672`       |
+| `RABBIT_UI_PORT`         | Management UI порт     | `15672`      |
+
+### Мониторинг
+
+| Переменная                | Описание                      | По умолчанию |
+|---------------------------|-------------------------------|--------------|
+| `ENABLE_GRAFANA`          | Включить Grafana              | `1`          |
+| `ENABLE_PROMETHEUS`       | Включить Prometheus           | `1`          |
+| `ENABLE_LOKI`             | Включить Loki                 | `1`          |
+| `GRAFANA_ADMIN_PASSWORD`  | Пароль админа Grafana         | `admin`      |
+| `MONITORING_USER`         | Basic Auth для субдоменов     | `admin`      |
+| `MONITORING_PASSWORD`     | Пароль Basic Auth             | генерируется |
+
+### Субдомены для сервисов
+
+| Переменная              | Описание                 | По умолчанию   |
+|-------------------------|--------------------------|----------------|
+| `GRAFANA_CONFIG`        | Включить субдомен (0/1)  | `0`            |
+| `GRAFANA_SUBDOMAIN`     | Имя субдомена            | `grafana`      |
+| `PROMETHEUS_CONFIG`     | Включить субдомен (0/1)  | `0`            |
+| `PROMETHEUS_SUBDOMAIN`  | Имя субдомена            | `prometheus`   |
+| `MAIL_CONFIG`           | Включить субдомен (0/1)  | `0`            |
+| `RABBIT_CONFIG`         | Включить субдомен (0/1)  | `0`            |
+
+### Бэкапы
+
+| Переменная               | Описание                    | По умолчанию    |
+|--------------------------|------------------------------|-----------------|
+| `BACKUP_SCHEDULE_DB`     | Cron-расписание бэкапа БД   | `0 2 * * *`     |
+| `BACKUP_SCHEDULE_FILES`  | Cron-расписание файлов       | `0 3 * * *`     |
+| `BACKUP_RETENTION_DAYS`  | Хранить бэкапы (дней)        | `7`             |
+| `BACKUP_PATH`            | Путь хранения                | `./backups`     |
+
+### Docker Compose Profiles
+
+| Профиль      | Что включает                             |
+|--------------|------------------------------------------|
+| `local`      | MailHog, Xdebug                          |
+| `dev`        | Dev-окружение                            |
+| `prod`       | Production-оптимизации                   |
+| `monitoring` | Grafana, Prometheus, Loki, экспортёры    |
+| `push`       | Push Server (pub + sub)                  |
+| `backup`     | Контейнер бэкапов                        |
+| `rabbitmq`   | RabbitMQ + exporter                      |
+| `security`   | Fail2ban, ModSecurity                    |
+| `split`      | Раздельные PHP-контейнеры                |
+| `full`       | Все сервисы сразу                        |
+
+---
+
+## Команды Makefile
+
+### Быстрый старт
+
+| Команда               | Описание                                                  |
+|-----------------------|-----------------------------------------------------------|
+| `make setup`          | Подготовка (генерация секретов + оптимизация + валидация) |
+| `make first-run`      | Полная инициализация с нуля (local)                       |
+| `make first-run-prod` | Полная инициализация для production                       |
+| `make quick-start`    | Быстрый запуск без полной настройки                       |
+| `make optimize`       | Пересоздать конфиги под текущий сервер                    |
+| `make validate`       | Валидация .env файла                                      |
+
+### Управление контейнерами
+
+| Команда              | Описание                |
+|----------------------|-------------------------|
+| `make local`         | Запуск для разработки   |
+| `make dev`           | Запуск для dev-сервера  |
+| `make prod`          | Запуск для production   |
+| `make local-down`    | Остановить              |
+| `make local-restart` | Перезапустить           |
+| `make local-logs`    | Логи                    |
+| `make local-ps`      | Статус контейнеров      |
+
+> Аналогичные команды доступны с префиксами `dev-` и `prod-`.
+
+### Сайты
+
+| Команда                                  | Описание                     |
+|------------------------------------------|------------------------------|
+| `make site-add SITE=example.com`         | Добавить сайт                |
+| `make site-remove SITE=example.com`      | Удалить сайт (включая БД)    |
+| `make site-list`                         | Список сайтов                |
+| `make site-ssl SITE=example.com`         | Self-signed SSL              |
+| `make site-ssl-le SITE=example.com`      | Let's Encrypt SSL            |
+| `make site-clone FROM=a.com TO=b.com`    | Клонировать сайт             |
+| `make site-reload`                       | Перезагрузить nginx          |
+| `make db-init SITE=example.com`          | Создать БД для сайта         |
+| `make db-init-all`                       | Создать БД для всех сайтов   |
+| `make db-list-sites`                     | Список per-site БД           |
+
+### Бэкапы
+
+| Команда                                         | Описание                  |
+|--------------------------------------------------|---------------------------|
+| `make backup-full [SITE=...]`                    | Полный бэкап              |
+| `make backup-db [SITE=...]`                      | Бэкап БД                 |
+| `make backup-files [SITE=...]`                   | Бэкап файлов             |
+| `make backup-list`                               | Список бэкапов            |
+| `make backup-restore-db FILE=... [SITE=...]`     | Восстановить БД           |
+| `make backup-restore-files FILE=... [SITE=...]`  | Восстановить файлы        |
+| `make backup-restore-full DIR=... [SITE=...]`    | Восстановить полный       |
+| `make backup-cleanup`                            | Очистка старых бэкапов     |
+| `make backup-sites`                              | Список сайтов для бэкапа   |
+
+### Безопасность
+
+| Команда                            | Описание                       |
+|------------------------------------|--------------------------------|
+| `make security-up`                 | Запуск Fail2ban                |
+| `make security-up-full`            | Fail2ban + ModSecurity         |
+| `make security-down`               | Остановить                     |
+| `make security-stats`              | Статистика                     |
+| `make fail2ban-status`             | Статус Fail2ban                |
+| `make fail2ban-jails`              | Список jail'ов                 |
+| `make fail2ban-banned`             | Заблокированные IP             |
+| `make fail2ban-unban IP=x.x.x.x`  | Разблокировать IP              |
+| `make fail2ban-ban IP=x.x.x.x`    | Заблокировать IP               |
+
+### Логи
+
+| Команда                                 | Описание                           |
+|-----------------------------------------|------------------------------------|
+| `make logs-status`                      | Размер и статус логов              |
+| `make logs-rotate`                      | Ротация больших логов              |
+| `make logs-cleanup [RETENTION_DAYS=N]`  | Удалить старые логи                |
+| `make logs-maintain`                    | Ротация + очистка                  |
+| `make logs-setup-cron`                  | Автоматическая ротация через cron  |
+| `make logs-clear-all`                   | Удалить ВСЕ логи                   |
+| `make logs-nginx`                       | Логи nginx                         |
+| `make logs-php`                         | Логи PHP-FPM                       |
+| `make logs-mysql`                       | Логи MySQL                         |
+
+### Docker и диск
+
+| Команда                        | Описание                                  |
+|--------------------------------|-------------------------------------------|
+| `make docker-status`           | Использование диска Docker                |
+| `make docker-clean`            | Мягкая очистка (безопасно)                |
+| `make docker-clean-full`       | Полная очистка                            |
+| `make docker-clean-aggressive` | Максимальная очистка (+ build cache)      |
+| `make docker-clean-cron`       | Еженедельная автоочистка через cron       |
+| `make disk-usage`              | Использование диска хоста + Docker        |
+
+### Сборка образов
+
+| Команда               | Описание                                 |
+|------------------------|------------------------------------------|
+| `make build-base`      | Собрать базовые PHP-образы (CLI + FPM)   |
+| `make build-base-cli`  | Только CLI                               |
+| `make build-base-fpm`  | Только FPM                               |
+
+### Split mode
+
+| Команда                  | Описание                              |
+|--------------------------|---------------------------------------|
+| `make split-local`       | Split mode для разработки             |
+| `make split-prod`        | Split mode для production             |
+| `make split-down`        | Остановить                            |
+| `make split-ps`          | Статус                                |
+| `make split-logs`        | Логи                                  |
+| `make split-rebuild-php` | Пересобрать только PHP-контейнеры     |
+| `make bash-fpm`          | Shell в php-fpm                       |
+| `make bash-cli`          | Shell в php-cli                       |
+| `make bash-cron`         | Shell в cron                          |
+| `make bash-supervisor`   | Shell в supervisor                    |
+
+### Systemd
+
+| Команда                  | Описание                           |
+|--------------------------|-------------------------------------|
+| `make install-service`   | Установить автозапуск (sudo)       |
+| `make uninstall-service` | Удалить автозапуск                 |
+| `make service-status`    | Статус сервиса                     |
+| `make service-logs`      | Логи systemd                       |
+
+### Диагностика
+
+| Команда                    | Описание                                    |
+|----------------------------|----------------------------------------------|
+| `make mysql-diag`          | Диагностика MySQL (логи, конфиги, ресурсы)   |
+| `make mysql-reset`         | Пересоздать MySQL с нуля (удалит данные!)     |
+| `make auto-config`         | Автоконфигурация под ресурсы сервера          |
+| `make auto-config-preview` | Предварительный просмотр конфигурации         |
+| `make auto-config-manual CPU_CORES=8 RAM_GB=16` | Ручной ввод параметров  |
+
+### Доступ к контейнерам
+
+```bash
+make bash_cli_local        # PHP CLI (local)
+make bash_local_nginx      # Nginx (local)
+make bash_cli              # PHP CLI
+make bash_nginx            # Nginx
+```
+
+### Nginx
+
+```bash
+make check_local_nginx     # Проверить конфигурацию
+make reload_local_nginx    # Перезагрузить
+make check_nginx           # Проверить (prod)
+make reload_nginx          # Перезагрузить (prod)
+```
+
+### Справка
+
+```bash
+make help                  # Все команды
+make help-quick            # Шпаргалка
+make help-sites            # Управление сайтами
+make help-backup           # Бэкапы
+make help-security         # Безопасность
+make help-logs             # Логи
+make help-docker           # Очистка Docker
+make help-autoconfig       # Автоконфигурация
+```
+
+---
+
+## Структура проекта
+
+```
+b-docker/
+├── .env.example                        # Шаблон переменных окружения
+├── Makefile                            # Все команды управления
+├── docker-compose.bitrix.yml           # Единый compose-файл с профилями
+│
+├── docker/                             # Dockerfiles и файлы сборки
+│   ├── nginx/Dockerfile
+│   ├── mysql/Dockerfile
+│   ├── redis/Dockerfile
+│   ├── memcached/Dockerfile
+│   ├── rabbitmq/Dockerfile
+│   ├── mailhog/Dockerfile
+│   ├── backup/Dockerfile
+│   ├── fail2ban/
+│   │   ├── Dockerfile
+│   │   └── config/filter.d/           # 7 фильтров Fail2ban
+│   ├── modsecurity/Dockerfile
+│   ├── mongodb/Dockerfile
+│   └── php/
+│       ├── base/                       # Базовые PHP-образы
+│       │   ├── cli/{7.4,8.3,8.4}/Dockerfile
+│       │   └── fpm/{7.4,8.3,8.4}/Dockerfile
+│       ├── bitrix/Dockerfile           # Unified контейнер
+│       ├── php-fpm/Dockerfile          # Split: FPM
+│       ├── php-cli/Dockerfile          # Split: CLI
+│       ├── cron/Dockerfile             # Split: Cron
+│       └── supervisor/Dockerfile       # Split: Supervisor
+│
+├── config/                             # Runtime-конфигурации
+│   ├── cron/crontab                    # Cron-задачи
+│   ├── mysql/
+│   │   ├── my.{local,dev,prod}.cnf    # MySQL конфиги по окружению
+│   │   └── init/                       # SQL-скрипты инициализации
+│   ├── nginx/
+│   │   ├── sites/                      # Per-site nginx конфиги
+│   │   ├── ssl/                        # SSL сертификаты
+│   │   └── conf/                       # Дополнительные nginx конфиги
+│   ├── redis/redis.conf
+│   ├── memcached/memcached.conf
+│   ├── supervisor/conf/                # Supervisor-программы (воркеры)
+│   ├── sites/                          # Per-site конфигурации
+│   │   ├── _template/                  # Шаблоны для новых сайтов
+│   │   └── {domain}/                   # Конфиг конкретного сайта
+│   ├── grafana/
+│   │   ├── provisioning/               # Источники данных
+│   │   └── dashboards/                 # Готовые дашборды
+│   ├── prometheus/
+│   │   ├── prometheus.yml
+│   │   └── rules/                      # Правила алертов
+│   ├── loki/loki-config.yaml
+│   ├── promtail/config.yml
+│   ├── msmtp/                          # SMTP-конфигурация
+│   ├── backup/                         # Конфиги бэкапов
+│   ├── certbot/                        # Let's Encrypt скрипты
+│   ├── logrotate/                      # Ротация логов
+│   └── bitrix/                         # Пример .settings.php
+│
+├── scripts/                            # Скрипты автоматизации
+│   ├── site.sh                         # Управление мультисайтами
+│   ├── generate-secrets.sh             # Генерация паролей
+│   ├── auto-optimize.sh                # Авто-оптимизация под сервер
+│   ├── validate-env.sh                 # Валидация .env
+│   ├── apply-security-fixes.sh         # Security hardening
+│   ├── backup.sh                       # Скрипт бэкапов
+│   ├── security-scan.sh                # Сканирование безопасности
+│   ├── logs-rotate.sh                  # Ротация логов
+│   ├── docker-cleanup.sh               # Очистка Docker
+│   ├── install-service.sh              # Установка systemd сервиса
+│   └── auto-setup-bitrix.sh            # Автоустановка Битрикс
+│
+├── www/                                # Код сайтов (gitignored)
+│   └── {domain}/www/                   # Document root сайта
+│
+├── volume/                             # Персистентные данные (gitignored)
+│   ├── logs/                           # Логи всех сервисов
+│   │   ├── nginx/ php/ php-fpm/
+│   │   ├── cron/ supervisor/
+│   │   ├── mysql/ redis/ memcached/
+│   │   ├── rabbitmq/ fail2ban/
+│   │   ├── msmtp/ letsencrypt/ bitrix/
+│   └── mysql/dump/                     # Дампы БД
+│
+├── backups/                            # Бэкапы (gitignored)
+│   ├── database/ files/ full/
+│
+└── ssl/                                # SSL сертификаты
+```
+
+---
+
+## Авто-оптимизация
+
+Скрипт `auto-optimize.sh` автоматически настраивает параметры под ресурсы сервера:
+
+| Параметр                         | Формула                           |
+|----------------------------------|-----------------------------------|
+| `PHP_FPM_MAX_CHILDREN`           | CPU_CORES * 3                     |
+| `PHP_FPM_START_SERVERS`          | CPU_CORES * 0.75                  |
+| `PHP_FPM_MIN_SPARE_SERVERS`      | MAX(CPU_CORES - 1, 2)            |
+| `PHP_FPM_MAX_SPARE_SERVERS`      | CPU_CORES                         |
+| `MYSQL_INNODB_BUFFER_POOL_SIZE`  | RAM * 0.5                         |
+| `MYSQL_MAX_CONNECTIONS`          | CPU_CORES * 10                    |
+| `MYSQL_IMAGE`                    | Выбор по объёму RAM               |
+| `PHP_OPCACHE_MEMORY`            | 128 / 256 / 512 по объёму RAM     |
+
+```bash
+make optimize                                    # Пересоздать конфиги
+make auto-config-preview                         # Предварительный просмотр
+make auto-config-manual CPU_CORES=8 RAM_GB=16    # Ручной ввод параметров
+```
+
+---
+
+## Xdebug
+
+Активируется при `DEBUG=1` в `.env` (только окружения `local` и `dev`):
+
+| Параметр     | Значение                |
+|--------------|-------------------------|
+| Порт         | 9003                    |
+| Режим        | trigger                 |
+| Host         | `host.docker.internal`  |
+| IDE key      | `PHPSTORM`              |
 
 ---
 
 ## Troubleshooting
 
-### 502 Bad Gateway
+### MySQL не запускается
 
 ```bash
-# Check PHP-FPM status
-docker compose -f docker-compose.bitrix.yml exec bitrix supervisorctl status
-
-# Restart PHP-FPM
-docker compose -f docker-compose.bitrix.yml exec bitrix supervisorctl restart php-fpm
-
-# Check logs
-make logs-php
+make mysql-diag       # Полная диагностика (ресурсы, логи, конфиги)
+make mysql-reset      # Пересоздать с нуля (УДАЛИТ ДАННЫЕ!)
 ```
 
-### Database Connection Failed
+Частые причины:
+- `innodb_buffer_pool_size` больше доступной RAM -- уменьшите в `.env`
+- Для серверов с < 4 ГБ RAM используйте `MYSQL_IMAGE=mariadb:10.11`
+- На macOS/ARM проблемы с `innodb-flush-method=O_DIRECT` -- отключен по умолчанию
+
+### Контейнеры не видят друг друга
 
 ```bash
-# Check MySQL status
-docker compose -f docker-compose.bitrix.yml exec mysql mysqladmin ping
-
-# Verify credentials
-cat config/sites/shop.local/site.env
-
-# Check if database exists
-docker compose -f docker-compose.bitrix.yml exec mysql mysql -u root -p'$DB_ROOT_PASSWORD' -e "SHOW DATABASES"
+make docker-network-create   # Пересоздать сеть
 ```
 
-### Site Not Loading After Adding
+### Nginx возвращает 502
+
+PHP-FPM контейнер ещё не готов. Nginx запускается независимо и отдаёт 502 до готовности PHP-FPM. Подождите завершения health check (~40 секунд).
+
+### OPcache не работает в разработке
+
+По умолчанию `PHP_OPCACHE_ENABLE=0` для `local`. Это корректное поведение -- в разработке OPcache отключен для актуальности кода.
+
+### Права доступа на файлы
+
+Убедитесь что `UID` и `GID` в `.env` совпадают с вашим пользователем:
 
 ```bash
-# Check nginx config
-make check_nginx
-
-# Reload nginx
-make reload_nginx
-
-# Verify /etc/hosts
-cat /etc/hosts | grep shop.local
-
-# Check site files exist
-ls -la www/shop.local/www/
+id -u    # Ваш UID
+id -g    # Ваш GID
 ```
 
-### Permission Denied
+### Redis Unix Socket
+
+Redis подключается через Unix Socket (shared volume `redis-socket`), что даёт прирост ~30% по сравнению с TCP. При проблемах можно переключиться на TCP через `REDIS_HOST=redis` в конфиге Битрикс.
+
+### Логи занимают много места
 
 ```bash
-# Fix file permissions
-sudo chown -R $(id -u):$(id -g) www/
-sudo chmod -R 755 www/
-sudo chmod -R 777 www/*/www/upload www/*/www/bitrix/cache
+make logs-status      # Проверить размер логов
+make logs-maintain    # Ротация + очистка старых
+make logs-setup-cron  # Настроить автоматическую ротацию
 ```
 
-### Container Won't Start
+### Docker занимает много места
 
 ```bash
-# Check logs
-docker compose -f docker-compose.bitrix.yml logs bitrix
+make docker-status          # Сколько занимает Docker
+make docker-clean           # Безопасная очистка
+make docker-clean-full      # Полная очистка
+make docker-clean-cron      # Автоматическая еженедельная очистка
+```
 
-# Rebuild containers
-make build-base
-make local-restart
+### Сайт не загружается после добавления
+
+```bash
+make check_local_nginx              # Проверить nginx конфигурацию
+make reload_local_nginx             # Перезагрузить nginx
+cat /etc/hosts | grep shop.local    # Проверить /etc/hosts
+ls -la www/shop.local/www/          # Проверить файлы сайта
 ```
 
 ---
 
 ## FAQ
 
-### How do I switch PHP version?
+### Как сменить версию PHP?
 
 ```bash
-# Edit .env
-PHP_VERSION=8.4  # or 8.3, 7.4
+# 1. Изменить в .env:
+PHP_VERSION=8.4    # или 8.3, 7.4
 
-# Rebuild
+# 2. Пересобрать и перезапустить:
 make build-base
 make local-restart
 ```
 
-### How do I switch MySQL to MariaDB?
+### Как переключиться на MariaDB / Percona?
 
 ```bash
-# Edit .env
+# Изменить в .env:
 MYSQL_IMAGE=mariadb:10.11
+# или
+MYSQL_IMAGE=quay.io/bitrix24/percona-server:8.0.44-v1-rhel
 
-# Restart
+# Перезапустить:
 make local-restart
 ```
 
-### Where are the logs?
+### Где находятся логи?
 
-- **Files**: `./volume/logs/` (7 days retention)
-- **Grafana/Loki**: http://localhost:3000 (1 year retention)
+| Расположение              | Описание                    |
+|---------------------------|------------------------------|
+| `./volume/logs/`          | Файловые логи (ротация)     |
+| Grafana/Loki              | Централизованные логи        |
+| `docker logs <container>` | Docker stdout/stderr         |
 
-### How do I access container shell?
+### Как добавить PHP-расширение?
+
+1. Отредактируйте `docker/php/base/fpm/{version}/Dockerfile`
+2. Пересоберите:
 
 ```bash
-make bash_cli_local    # PHP CLI
-make bash_local_nginx  # Nginx
+make build-base
+make local-restart
 ```
 
-### How do I configure SMTP for production?
+### Как настроить SMTP для production?
 
-Edit the per-site msmtp config:
+Отредактируйте per-site конфиг:
 
 ```bash
 # config/sites/shop.local/msmtp.conf
@@ -900,47 +1028,19 @@ password your-smtp-password
 tls on
 ```
 
-### How do I add custom PHP modules?
-
-Edit `docker/php/base/fpm/{version}/Dockerfile` and rebuild:
-
-```bash
-make build-base
-make local-restart
-```
-
 ---
 
 ## Production Checklist
 
-Before deploying to production:
+Перед деплоем на production:
 
-- [ ] Change ALL passwords in `.env`
-- [ ] Set `DEBUG=0`
-- [ ] Configure SSL (`SSL=letsencrypt`)
-- [ ] Set up firewall (allow only 80, 443, 22)
-- [ ] Configure automatic backups
-- [ ] Set up external backup storage (S3, rsync)
-- [ ] Configure Grafana alerts
-- [ ] Enable Fail2ban (`make security-up`)
-- [ ] Enable Bitrix composite cache
-- [ ] Test backup/restore procedure
-
----
-
-## License
-
-MIT License
-
----
-
-## Support
-
-1. Check [Troubleshooting](#troubleshooting)
-2. Check [FAQ](#faq)
-3. View logs: `make local-logs`
-4. Check container status: `make local-ps`
-
----
-
-**Production Ready!** This environment provides everything needed to run one or multiple Bitrix sites with full isolation, monitoring, security, and automated management.
+- [ ] Все пароли изменены (выполнен `make setup`)
+- [ ] `DEBUG=0` в `.env`
+- [ ] `PHP_OPCACHE_ENABLE=1` в `.env`
+- [ ] SSL настроен (`SSL=free` для Let's Encrypt)
+- [ ] Бэкапы включены (профиль `backup`)
+- [ ] Fail2ban запущен (`make security-up`)
+- [ ] Systemd сервис установлен (`sudo make install-service`)
+- [ ] Мониторинг работает (Grafana доступна)
+- [ ] Протестирована процедура backup/restore
+- [ ] Firewall настроен (только 80, 443, 22)

@@ -99,7 +99,10 @@ COPY /docker/common/php/conf.d /usr/local/etc/php/conf.d
 
 # Base entrypoint (shared) — CLI uses it for PHP config generation
 COPY /docker/common/php/entrypoint-base.sh /usr/local/bin/entrypoint-base
-RUN chmod +x /usr/local/bin/entrypoint-base
+
+# CLI-specific entrypoint
+COPY /docker/php/php-cli/entrypoint.sh /usr/local/bin/docker-entrypoint
+RUN chmod +x /usr/local/bin/entrypoint-base /usr/local/bin/docker-entrypoint
 
 # ============================================================================
 # CLEANUP DEBUG TOOLS IN PRODUCTION
@@ -122,5 +125,8 @@ RUN if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "production" ]; then \
 WORKDIR /home/${UGN}/app
 
 # No healthcheck needed — CLI container is used for exec access
-# Keep container running with interactive PHP shell
-CMD ["php", "-a"]
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]
+
+# Keep container alive for exec access (php -a exits without TTY, causing restart loop)
+CMD ["sleep", "infinity"]

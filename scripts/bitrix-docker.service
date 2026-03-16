@@ -1,12 +1,9 @@
 # ============================================================================
 # SYSTEMD SERVICE FOR BITRIX DOCKER
-# Auto-start containers after server reboot
+# Auto-start containers after server reboot with health verification
 #
 # Installation:
-#   sudo cp scripts/bitrix-docker.service /etc/systemd/system/
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable bitrix-docker
-#   sudo systemctl start bitrix-docker
+#   sudo ./scripts/install-service.sh install
 #
 # Or use:
 #   make install-service
@@ -18,6 +15,9 @@ Documentation=https://github.com/your-repo/b-docker
 After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service
+# Prevent rapid restart loops: max 3 attempts in 60 seconds
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=oneshot
@@ -25,25 +25,40 @@ RemainAfterExit=yes
 User=root
 Group=docker
 
-# Set working directory
+# Working directory (replaced by install script)
 WorkingDirectory=/home/deploy/bitrix
 
-# Environment file
+# Environment file for COMPOSE_PROFILES, DOMAIN, etc.
 EnvironmentFile=-/home/deploy/bitrix/.env
 
-# Start containers
-ExecStart=/usr/bin/docker compose -f docker-compose.bitrix.yml --profile prod --profile monitoring --profile backup up -d
+# Wait for Docker daemon to be fully ready before starting
+ExecStartPre=/bin/bash -c 'until docker info >/dev/null 2>&1; do sleep 2; done'
 
-# Stop containers gracefully
-ExecStop=/usr/bin/docker compose -f docker-compose.bitrix.yml --profile prod --profile monitoring --profile backup down
+# Create Docker network if it does not exist yet
+ExecStartPre=/bin/bash -c 'docker network inspect ${COMPOSE_PROJECT_NAME:-bitrix}_network >/dev/null 2>&1 || docker network create ${COMPOSE_PROJECT_NAME:-bitrix}_network --subnet=172.20.0.0/16 || true'
 
-# Restart policy
+# Start containers with all production profiles
+# NOTE: Profiles can be overridden via COMPOSE_PROFILES in .env
+ExecStart=/usr/bin/docker compose -f docker-compose.bitrix.yml --profile prod --profile monitoring --profile backup --profile push --profile security up -d --remove-orphans
+
+# Health verification: wait for containers, then check health status
+ExecStartPost=/bin/bash -c 'sleep 10 && docker compose -f docker-compose.bitrix.yml ps --format "{{.Name}} {{.Status}}" | grep -q "healthy" && echo "Services are healthy" || echo "WARNING: Some services may not be healthy yet"'
+
+# Stop containers gracefully with extended timeout for DB flush
+ExecStop=/usr/bin/docker compose -f docker-compose.bitrix.yml --profile prod --profile monitoring --profile backup --profile push --profile security down --timeout 60
+
+# Restart on failure only (not on clean stop)
 Restart=on-failure
 RestartSec=30
 
-# Timeout
-TimeoutStartSec=300
-TimeoutStopSec=120
+# Generous timeouts for large deployments with DB warmup
+TimeoutStartSec=600
+TimeoutStopSec=180
+
+# Logging to journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bitrix-docker
 
 [Install]
 WantedBy=multi-user.target
