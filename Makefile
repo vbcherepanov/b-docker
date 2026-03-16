@@ -13,7 +13,7 @@ UGN ?=bitrix
 NETWORK_NAME ?=${DOMAIN}_network
 DOCKER_SUBNET ?=172.20.0.0/16
 
-.PHONY: reload-cron up init down build docker-build docker-up docker-down-clear test init composer-install cli cron-agent tests-run init-system create-unit-test create_dump monitoring-up monitoring-down portainer-up portainer-down backup-db backup-files backup-full set-local set-dev set-prod ssl-generate logs-nginx logs-php status clean-volumes clean-images clean-all disk-usage setup first-run quick-start
+.PHONY: reload-cron up init down build docker-build docker-up docker-down-clear test init composer-install cli cron-agent tests-run init-system create-unit-test create_dump monitoring-up monitoring-down portainer-up portainer-down backup-db backup-files backup-full set-local set-dev set-prod ssl-generate logs-nginx logs-php status clean-volumes clean-images clean-all disk-usage setup first-run quick-start split-local split-prod split-down split-ps split-logs bash-fpm bash-cli bash-cron bash-supervisor split-rebuild-php
 
 # ============================================================================
 # 🚀 БЫСТРЫЙ СТАРТ (НАЧАЛО РАБОТЫ С НУЛЯ)
@@ -458,6 +458,53 @@ set-dev:
 	cp .env.dev .env
 set-prod:
 	cp .env.prod .env
+
+# ============================================================================
+# SPLIT PHP ARCHITECTURE
+# Run separate containers for PHP-FPM, CLI, Cron, Supervisor
+# Instead of the unified "bitrix" container
+# Usage: make split-local / make split-prod
+# ============================================================================
+
+## Split mode: local development
+split-local:
+	$(DOCKER_COMPOSE) --profile local --profile split --profile monitoring up -d --build
+
+## Split mode: production
+split-prod:
+	$(DOCKER_COMPOSE) --profile prod --profile split --profile monitoring --profile backup --profile rabbitmq up -d --build
+
+## Split mode: stop
+split-down:
+	$(DOCKER_COMPOSE) --profile split down
+
+## Split mode: status
+split-ps:
+	$(DOCKER_COMPOSE) --profile split ps
+
+## Split mode: logs
+split-logs:
+	$(DOCKER_COMPOSE) --profile split logs -f
+
+## Bash into php-fpm container
+bash-fpm:
+	docker exec -it $${DOMAIN}_php-fpm sh
+
+## Bash into php-cli container
+bash-cli:
+	docker exec -it $${DOMAIN}_php-cli sh
+
+## Bash into cron container
+bash-cron:
+	docker exec -it $${DOMAIN}_cron sh
+
+## Bash into supervisor container
+bash-supervisor:
+	docker exec -it $${DOMAIN}_supervisor sh
+
+## Rebuild only PHP services (split mode)
+split-rebuild-php:
+	$(DOCKER_COMPOSE) --profile split build php-fpm php-cli cron supervisor
 
 # Команды для SSL (старые, используют контейнер nginx)
 ssl-generate-local:

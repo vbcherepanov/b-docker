@@ -259,6 +259,360 @@ services:
       - "prometheus.port=9000"
 
   # ==========================================================================
+  # SPLIT ARCHITECTURE - РАЗДЕЛЬНЫЕ PHP-КОНТЕЙНЕРЫ (АЛЬТЕРНАТИВА)
+  # ==========================================================================
+  # Запуск: docker compose --profile split up -d
+  # В этом режиме вместо единого "bitrix" контейнера используются 4 отдельных:
+  #   php-fpm    — обработка HTTP-запросов через FastCGI
+  #   php-cli    — CLI-операции, composer, миграции, интерактивный доступ
+  #   cron       — периодические задачи (agents, crontab)
+  #   supervisor — фоновые воркеры (очереди, long-running процессы)
+  #
+  # ВАЖНО: При использовании split-профиля НЕ запускайте "bitrix" сервис!
+  # Nginx должен быть настроен на upstream "php-fpm" вместо "bitrix"
+  # (см. переменную PHP_FPM_HOST в секции nginx)
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # PHP-FPM — FastCGI process manager для обработки HTTP-запросов
+  # --------------------------------------------------------------------------
+  php-fpm:
+    profiles: ["split"]
+    container_name: ${DOMAIN}_php-fpm
+    hostname: ${DOMAIN}
+    build:
+      context: .
+      dockerfile: docker/php/php-fpm/Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+        TZ: ${TZ}
+        ENVIRONMENT: ${ENVIRONMENT}
+        DOMAIN: ${DOMAIN}
+        EMAIL: ${EMAIL}
+        SSL: ${SSL:-0}
+        UID: ${UID}
+        GID: ${GID}
+        UGN: ${UGN}
+        DEBUG: ${DEBUG:-0}
+
+    environment:
+      <<: *bitrix-env
+      # PHP-FPM settings
+      PHP_FPM_PM: ${PHP_FPM_PM:-dynamic}
+      PHP_FPM_MAX_CHILDREN: ${PHP_FPM_MAX_CHILDREN:-50}
+      PHP_FPM_START_SERVERS: ${PHP_FPM_START_SERVERS:-5}
+      PHP_FPM_MIN_SPARE_SERVERS: ${PHP_FPM_MIN_SPARE_SERVERS:-5}
+      PHP_FPM_MAX_SPARE_SERVERS: ${PHP_FPM_MAX_SPARE_SERVERS:-35}
+      # PHP settings
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-256M}
+      PHP_UPLOAD_MAX_FILESIZE: ${PHP_UPLOAD_MAX_FILESIZE:-64M}
+      PHP_POST_MAX_SIZE: ${PHP_POST_MAX_SIZE:-64M}
+      PHP_MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-300}
+      PHP_MAX_INPUT_TIME: ${PHP_MAX_INPUT_TIME:-300}
+      # OPcache (Bitrix official recommendations)
+      PHP_OPCACHE_ENABLE: ${PHP_OPCACHE_ENABLE:-1}
+      PHP_OPCACHE_MEMORY: ${PHP_OPCACHE_MEMORY:-256}
+      PHP_OPCACHE_INTERNED_STRINGS: ${PHP_OPCACHE_INTERNED_STRINGS:-64}
+      PHP_OPCACHE_MAX_FILES: ${PHP_OPCACHE_MAX_FILES:-100000}
+      PHP_OPCACHE_REVALIDATE_FREQ: ${PHP_OPCACHE_REVALIDATE_FREQ:-2}
+
+    volumes:
+      - *app-code
+      - *sites-config
+      - *logs-php
+      - *logs-php-fpm
+      - *logs-bitrix
+      # MSMTP logs (per-site)
+      - ./volume/logs/msmtp:/var/log/msmtp
+      # Redis unix socket (shared volume for ~30% performance boost)
+      - *redis-socket
+
+    depends_on:
+      <<: *depends-on-all
+      nginx:
+        condition: service_healthy
+
+    expose:
+      - "9000"
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm-healthcheck || kill -0 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+    labels:
+      - "com.docker.compose.service=php-fpm"
+      - "monitoring=true"
+      - "prometheus.scrape=true"
+      - "prometheus.port=9000"
+
+  # --------------------------------------------------------------------------
+  # PHP-CLI — CLI operations, composer, migrations, interactive access
+  # --------------------------------------------------------------------------
+  php-cli:
+    profiles: ["split"]
+    container_name: ${DOMAIN}_php-cli
+    hostname: ${DOMAIN}
+    build:
+      context: .
+      dockerfile: docker/php/php-cli/Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+        TZ: ${TZ}
+        ENVIRONMENT: ${ENVIRONMENT}
+        DOMAIN: ${DOMAIN}
+        EMAIL: ${EMAIL}
+        SSL: ${SSL:-0}
+        UID: ${UID}
+        GID: ${GID}
+        UGN: ${UGN}
+        DEBUG: ${DEBUG:-0}
+
+    environment:
+      <<: *bitrix-env
+      # PHP settings for CLI (higher limits for migrations/imports)
+      PHP_MEMORY_LIMIT: ${PHP_CLI_MEMORY_LIMIT:-512M}
+      PHP_MAX_EXECUTION_TIME: ${PHP_CLI_MAX_EXECUTION_TIME:-0}
+
+    volumes:
+      - *app-code
+      - *sites-config
+      - *logs-php
+      - *logs-bitrix
+      # MSMTP logs (per-site)
+      - ./volume/logs/msmtp:/var/log/msmtp
+      # Composer cache for faster dependency installation
+      - composer-cache:/home/${UGN}/.composer
+      # Redis unix socket
+      - *redis-socket
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      memcached:
+        condition: service_healthy
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    # Keep running for exec access (docker compose exec php-cli bash)
+    tty: true
+    stdin_open: true
+
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+
+    healthcheck:
+      test: ["CMD-SHELL", "php -v || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+    labels:
+      - "com.docker.compose.service=php-cli"
+
+  # --------------------------------------------------------------------------
+  # CRON — Periodic tasks (Bitrix agents, scheduled jobs)
+  # --------------------------------------------------------------------------
+  cron:
+    profiles: ["split"]
+    container_name: ${DOMAIN}_cron
+    hostname: ${DOMAIN}
+    build:
+      context: .
+      dockerfile: docker/php/cron/Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+        TZ: ${TZ}
+        ENVIRONMENT: ${ENVIRONMENT}
+        DOMAIN: ${DOMAIN}
+        EMAIL: ${EMAIL}
+        SSL: ${SSL:-0}
+        UID: ${UID}
+        GID: ${GID}
+        UGN: ${UGN}
+        DEBUG: ${DEBUG:-0}
+
+    environment:
+      <<: *bitrix-env
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-256M}
+      PHP_MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-300}
+
+    volumes:
+      - *app-code
+      - *crontab
+      - *sites-config
+      - *logs-cron
+      - *logs-php
+      - *logs-bitrix
+      # MSMTP logs (per-site)
+      - ./volume/logs/msmtp:/var/log/msmtp
+      # Redis unix socket
+      - *redis-socket
+
+    depends_on:
+      php-fpm:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep crond || pgrep cron || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+    labels:
+      - "com.docker.compose.service=cron"
+
+  # --------------------------------------------------------------------------
+  # SUPERVISOR — Background workers (queues, long-running processes)
+  # --------------------------------------------------------------------------
+  supervisor:
+    profiles: ["split"]
+    container_name: ${DOMAIN}_supervisor
+    hostname: ${DOMAIN}
+    build:
+      context: .
+      dockerfile: docker/php/supervisor/Dockerfile
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+        TZ: ${TZ}
+        ENVIRONMENT: ${ENVIRONMENT}
+        DOMAIN: ${DOMAIN}
+        EMAIL: ${EMAIL}
+        SSL: ${SSL:-0}
+        UID: ${UID}
+        GID: ${GID}
+        UGN: ${UGN}
+        DEBUG: ${DEBUG:-0}
+
+    environment:
+      <<: *bitrix-env
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-256M}
+      PHP_MAX_EXECUTION_TIME: ${PHP_MAX_EXECUTION_TIME:-300}
+
+    volumes:
+      - *app-code
+      - ./config/supervisor/conf:/etc/supervisor/conf.d
+      - *sites-config
+      - *logs-supervisor
+      - *logs-php
+      - *logs-bitrix
+      # MSMTP logs (per-site)
+      - ./volume/logs/msmtp:/var/log/msmtp
+      # Redis unix socket
+      - *redis-socket
+
+    depends_on:
+      php-fpm:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    networks:
+      - bitrix-network
+
+    restart: unless-stopped
+
+    logging: *default-logging
+
+    # Security hardening (Bitrix official)
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+
+    healthcheck:
+      test: ["CMD-SHELL", "supervisorctl status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+    labels:
+      - "com.docker.compose.service=supervisor"
+
+  # ==========================================================================
   # NGINX - ВЕБ-СЕРВЕР
   # ==========================================================================
   nginx:
@@ -292,7 +646,10 @@ services:
     environment:
       TZ: ${TZ}
       # FastCGI backend
-      PHP_FPM_HOST: bitrix
+      # DEFAULT (unified mode): PHP_FPM_HOST=bitrix (single "bitrix" container)
+      # SPLIT MODE: Set PHP_FPM_HOST=php-fpm in .env when using --profile split
+      # This controls the upstream for fastcgi_pass in nginx config
+      PHP_FPM_HOST: ${PHP_FPM_HOST:-bitrix}
       PHP_FPM_PORT: 9000
       # Monitoring basic auth (for grafana, prometheus, rabbit subdomains)
       MONITORING_USER: ${MONITORING_USER:-admin}
@@ -1173,7 +1530,7 @@ volumes:
   promtail-positions:
     name: ${DOMAIN}_promtail_positions
 
-  # Redis unix socket (shared between redis and bitrix containers)
+  # Redis unix socket (shared between redis and PHP containers: bitrix or php-fpm/php-cli/cron/supervisor)
   redis-socket:
     name: ${DOMAIN}_redis_socket
 
