@@ -1,0 +1,320 @@
+# ============================================================
+# Docker Compose Override - Security & Performance Hardening
+# This file automatically merges with docker-compose.bitrix.yml
+#
+# USAGE:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   nano docker-compose.override.yml  # adjust limits for your server
+#
+# Resource limits below are for a server with 16GB RAM / 8 CPU.
+# Adjust values based on your hardware:
+#   - 4GB RAM:  halve all memory limits
+#   - 32GB RAM: double memory limits for bitrix/mysql
+#   - 2 CPU:    set all cpus limits to '1' or less
+# ============================================================
+
+services:
+
+  # ============================================
+  # BITRIX - PHP-FPM + Supervisor + Cron
+  # ============================================
+  bitrix:
+    # Graceful shutdown
+    stop_grace_period: 30s
+    stop_signal: SIGQUIT
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+    # Production environment
+    environment:
+      - OPCACHE_VALIDATE_TIMESTAMPS=0
+
+  # ============================================
+  # PHP-FPM - FastCGI Process Manager (split mode)
+  # ============================================
+  php-fpm:
+    stop_grace_period: 30s
+    stop_signal: SIGQUIT
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid,size=256M
+
+  # ============================================
+  # PHP-CLI - CLI Operations (split mode)
+  # ============================================
+  php-cli:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ============================================
+  # CRON - Periodic Tasks (split mode)
+  # ============================================
+  cron:
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ============================================
+  # SUPERVISOR - Background Workers (split mode)
+  # ============================================
+  supervisor:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ============================================
+  # NGINX - Web Server
+  # ============================================
+  nginx:
+    # Graceful shutdown
+    stop_grace_period: 10s
+    stop_signal: SIGQUIT
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+    # NOTE: security_opt already defined in main compose
+
+  # ============================================
+  # MYSQL - Database
+  # ============================================
+  mysql:
+    # Graceful shutdown (allow time for transactions)
+    stop_grace_period: 60s
+
+    # Resource limits (adjust based on your server)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+    # NOTE: security_opt already defined in main compose
+
+    # SECURITY: Remove exposed port in production
+    # Comment out ports section for production deployment
+    # ports:
+    #   - "${DB_PORT:-3306}:3306"
+
+  # ============================================
+  # REDIS - Cache
+  # ============================================
+  redis:
+    # Graceful shutdown
+    stop_grace_period: 10s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+
+    # NOTE: security_opt, tmpfs, read_only already defined in main compose
+
+    # SECURITY: Remove exposed port in production
+    # Comment out ports section for production deployment
+    # ports:
+    #   - "${REDIS_PORT:-6379}:6379"
+
+  # ============================================
+  # MEMCACHED - Additional Cache
+  # ============================================
+  memcached:
+    # NOTE: command is NOT overridden here — main compose already has full
+    # memcached command with -m, -c, -t, -I, -o modern and env var defaults.
+    # Overriding command would lose those parameters.
+    user: "11211:11211"
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    # NOTE: security_opt already defined in main compose
+    read_only: true
+
+  # ============================================
+  # RABBITMQ - Message Broker (if enabled)
+  # ============================================
+  amqp:
+    # Graceful shutdown
+    stop_grace_period: 30s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+    # NOTE: security_opt already defined in main compose
+
+  # ============================================
+  # MONITORING - Grafana
+  # ============================================
+  grafana:
+    # Fixed version (no :latest)
+    image: grafana/grafana:10.3.1
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    # NOTE: security_opt already defined in main compose
+
+  # ============================================
+  # MONITORING - Prometheus
+  # ============================================
+  prometheus:
+    # Fixed version (no :latest)
+    image: prom/prometheus:v2.49.1
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+
+    # NOTE: security_opt already defined in main compose
+
+  # ============================================
+  # MONITORING - Loki
+  # ============================================
+  loki:
+    # Fixed version (no :latest)
+    image: grafana/loki:2.9.4
+
+    # FIX: Run as non-root (requires volume permissions fix)
+    # user: "10001:10001"
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+
+    # NOTE: security_opt already defined in main compose
+
+  # ============================================
+  # MONITORING - Promtail
+  # ============================================
+  promtail:
+    # Fixed version (no :latest)
+    image: grafana/promtail:2.9.4
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+    # NOTE: security_opt already defined in main compose
+
+  # ============================================
+  # SECURITY - Fail2ban (if enabled)
+  # ============================================
+  fail2ban:
+    # FIX: Remove privileged mode
+    privileged: false
+
+    # Required capabilities only
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    cap_drop:
+      - ALL
+
+    # NOTE: security_opt already defined in main compose
+
+    # Read-only filesystem where possible
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/fail2ban
+
+  # ============================================
+  # BACKUP (if enabled)
+  # ============================================
+  backup:
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    # NOTE: security_opt already defined in main compose
