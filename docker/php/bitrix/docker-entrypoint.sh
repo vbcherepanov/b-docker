@@ -540,7 +540,7 @@ else
 fi
 
 # Generate OPcache runtime config
-cat > /usr/local/etc/php/conf.d/98-opcache-runtime.ini <<EOF
+cat > /usr/local/etc/php/conf.d/zz-opcache-runtime.ini <<EOF
 ; Auto-generated OPcache settings at container startup
 ; Environment: ${ENVIRONMENT}
 
