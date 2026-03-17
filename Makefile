@@ -110,6 +110,15 @@ first-run-prod: setup docker-network-create init-main-site ensure-defaults build
 	fi
 	@$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx /usr/local/bin/script/main.sh || true
 	@echo ""
+	@if [ "$(SSL)" = "free" ]; then \
+		echo "🔒 Запрос SSL сертификата (Let's Encrypt)..."; \
+		$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx sh -c \
+			'. /usr/local/bin/script/func/main.sh && ensure_cert "$(DOMAIN)" "$(LETSENCRYPT_EMAIL)"' && \
+		echo "🔄 Перезагрузка nginx с SSL..." && \
+		$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx nginx -s reload || \
+		echo "⚠️  SSL не получен. Запусти позже: make ssl-init"; \
+	fi
+	@echo ""
 	@echo "🔄 Установка автозапуска (systemd)..."
 	@if [ "$$(id -u)" = "0" ]; then \
 		./scripts/install-service.sh install --yes; \
@@ -133,6 +142,15 @@ first-run-prod: setup docker-network-create init-main-site ensure-defaults build
 	@echo "    2. Если автозапуск не установился:"
 	@echo "       sudo make install-service"
 	@echo ""
+
+# Запрос SSL сертификата (использовать после первого запуска если SSL не получен)
+ssl-init:
+	@echo "🔒 Запрос SSL сертификата для $(DOMAIN)..."
+	$(DOCKER_COMPOSE) exec --user root nginx sh -c \
+		'. /usr/local/bin/script/func/main.sh && ensure_cert "$(DOMAIN)" "$(LETSENCRYPT_EMAIL)"'
+	@echo "🔄 Перезагрузка nginx..."
+	$(DOCKER_COMPOSE) exec --user root nginx nginx -s reload
+	@echo "✅ SSL настроен для $(DOMAIN)"
 
 # Инициализация БД для сайта (использовать: make db-init SITE=domain.com)
 SITE ?= $(DOMAIN)

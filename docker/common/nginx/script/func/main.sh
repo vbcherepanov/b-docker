@@ -153,7 +153,7 @@ request_cert() {
     fi
 
     local output
-    output=$(certbot certonly --nginx --non-interactive --agree-tos \
+    output=$(certbot certonly --nginx --non-interactive --agree-tos --expand \
         --email "$email" $domain_args 2>&1)
     local result=$?
 
