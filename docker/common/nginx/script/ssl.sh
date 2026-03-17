@@ -35,6 +35,11 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
             if grep -q "ssl_certificate" "$_cf" 2>/dev/null; then
                 HAS_SSL=1
                 echo "[ssl] SSL already configured in $_cf, skipping"
+                # Remove duplicate HTTP-only config from conf.d if SSL is in sites-enabled
+                if [ "$_cf" = "/etc/nginx/sites-enabled/${DOMAIN}.conf" ] && [ -f "$CONF_DIR/${DOMAIN}.conf" ]; then
+                    echo "[ssl] Removing duplicate HTTP-only config: $CONF_DIR/${DOMAIN}.conf"
+                    rm -f "$CONF_DIR/${DOMAIN}.conf"
+                fi
                 break
             fi
         done
