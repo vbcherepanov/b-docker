@@ -99,10 +99,11 @@ x-logging: &default-logging
 # ==========================================================================
 
 # Base security options for all containers
+# NOTE: no-new-privileges removed globally — most containers need chmod/chown/gosu
+# in entrypoints which requires privilege operations. Security is maintained via
+# cap_drop: ALL + minimal cap_add per service.
 x-security-base: &security-base
   init: true
-  security_opt:
-    - no-new-privileges:true
 
 # tmpfs mounts for security (noexec, nodev, nosuid)
 x-tmpfs-secure: &tmpfs-secure
@@ -229,8 +230,6 @@ services:
 
     # Security hardening (Bitrix official)
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:
@@ -344,8 +343,6 @@ services:
 
     # Security hardening (Bitrix official)
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:
@@ -431,8 +428,6 @@ services:
 
     # Security hardening (Bitrix official)
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:
@@ -510,8 +505,6 @@ services:
 
     # Security hardening (Bitrix official)
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:
@@ -589,8 +582,6 @@ services:
 
     # Security hardening (Bitrix official)
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:
@@ -842,8 +833,6 @@ services:
 
     # Security hardening (Bitrix official)
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:
@@ -895,8 +884,6 @@ services:
 
     # Security hardening (Bitrix official)
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     tmpfs:
@@ -941,8 +928,6 @@ services:
 
     # Security hardening (Bitrix official)
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     tmpfs:
