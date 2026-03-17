@@ -500,7 +500,7 @@ server {
 
     # ACME challenge for Let's Encrypt renewal
     location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
+        root /home/$UGN/app/$domain/www;
     }
 
     location / {
@@ -520,7 +520,7 @@ server {
     server_name $redirect_name;
 
     location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
+        root /home/$UGN/app/$domain/www;
     }
 
     location / {
@@ -561,7 +561,7 @@ server {
 
     # ACME challenge for future Let's Encrypt setup
     location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
+        root /home/$UGN/app/$domain/www;
     }
 }
 ${http_redirect_block}
