@@ -26,16 +26,37 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
         # Process main domain
         echo "[ssl] Processing main domain: $DOMAIN"
 
-        # Skip template generation if per-site config exists in sites-enabled
+        # Ensure certificate exists (request if needed)
+        ensure_cert "$DOMAIN" "$EMAIL" || true
+
+        # Check if per-site config already has SSL configured
         if [ -f "/etc/nginx/sites-enabled/${DOMAIN}.conf" ]; then
-            echo "[ssl] Per-site config found for $DOMAIN, skipping template generation"
+            if grep -q "ssl_certificate" "/etc/nginx/sites-enabled/${DOMAIN}.conf" 2>/dev/null; then
+                echo "[ssl] Per-site config already has SSL, skipping"
+            elif cert_exists "$DOMAIN"; then
+                # Certificate exists but per-site config has no SSL — use certbot --nginx to install
+                echo "[ssl] Installing SSL into per-site config via certbot..."
+                certbot install --nginx --non-interactive \
+                    --cert-name "$DOMAIN" 2>&1 || \
+                    echo "[ssl] WARNING: certbot install failed, trying manual config..."
+
+                # Verify SSL was added
+                if grep -q "ssl_certificate" "/etc/nginx/sites-enabled/${DOMAIN}.conf" 2>/dev/null; then
+                    CERT_GENERATED=1
+                    echo "[ssl] SSL installed into per-site config for $DOMAIN"
+                else
+                    echo "[ssl] WARNING: Could not install SSL into per-site config"
+                fi
+            else
+                echo "[ssl] Per-site config found but no certificate available yet"
+            fi
         else
+            # No per-site config — generate SSL config from template
             cert_paths=$(get_cert_paths "$DOMAIN" "$EMAIL")
             if [ $? -eq 0 ]; then
                 CERT_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $1}')
                 KEY_PATH=$(echo "$cert_paths" | tail -1 | awk '{print $2}')
 
-                # Compute canonical host settings for template
                 CANONICAL_HOST="${CANONICAL_HOST:-non-www}"
                 if [ "$CANONICAL_HOST" = "www" ]; then
                     CANONICAL_NAME="www.$DOMAIN"
@@ -44,7 +65,6 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
                     CANONICAL_NAME="$DOMAIN"
                     REDIRECT_NAME="www.$DOMAIN"
                 else
-                    # "both" - no redirect
                     CANONICAL_NAME="$DOMAIN www.$DOMAIN"
                     REDIRECT_NAME=""
                 fi
@@ -52,7 +72,6 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
                 export CERT_PATH KEY_PATH CANONICAL_HOST CANONICAL_NAME REDIRECT_NAME
                 envsubst < "$TEMPLATE_DIR/ssl_site.conf.tmpl" > "$CONF_DIR/ssl_$DOMAIN.conf"
 
-                # Append redirect server block if needed
                 if [ -n "$REDIRECT_NAME" ]; then
                     cat >> "$CONF_DIR/ssl_$DOMAIN.conf" << REDIRECT_EOF
 # Redirect non-canonical HTTPS to canonical
@@ -68,10 +87,8 @@ server {
 REDIRECT_EOF
                 fi
 
-                # Remove placeholder from template output
                 sed -i 's/# REDIRECT_BLOCK_PLACEHOLDER//' "$CONF_DIR/ssl_$DOMAIN.conf"
 
-                # Remove HTTP-only config (replaced by SSL config with HTTP redirect)
                 if [ -f "$CONF_DIR/$DOMAIN.conf" ]; then
                     echo "[ssl] Removing HTTP-only config: $DOMAIN.conf (replaced by SSL config)"
                     rm -f "$CONF_DIR/$DOMAIN.conf"
