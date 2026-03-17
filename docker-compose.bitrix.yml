@@ -124,6 +124,7 @@ x-cap-files: &cap-files
     - CHOWN
     - SETUID
     - SETGID
+    - FOWNER
     - DAC_OVERRIDE
 
 # Capabilities for nginx (needs NET_BIND_SERVICE for ports < 1024)
@@ -236,6 +237,7 @@ services:
       - CHOWN
       - SETUID
       - SETGID
+      - FOWNER
       - DAC_OVERRIDE
     tmpfs:
       - /tmp:noexec,nodev,nosuid
@@ -349,6 +351,7 @@ services:
       - CHOWN
       - SETUID
       - SETGID
+      - FOWNER
       - DAC_OVERRIDE
     tmpfs:
       - /tmp:noexec,nodev,nosuid
@@ -434,6 +437,7 @@ services:
       - CHOWN
       - SETUID
       - SETGID
+      - FOWNER
       - DAC_OVERRIDE
     tmpfs:
       - /tmp:noexec,nodev,nosuid
@@ -511,6 +515,7 @@ services:
       - CHOWN
       - SETUID
       - SETGID
+      - FOWNER
       - DAC_OVERRIDE
     tmpfs:
       - /tmp:noexec,nodev,nosuid
@@ -588,6 +593,7 @@ services:
       - CHOWN
       - SETUID
       - SETGID
+      - FOWNER
       - DAC_OVERRIDE
     tmpfs:
       - /tmp:noexec,nodev,nosuid
