@@ -511,6 +511,10 @@ generate_nginx_config() {
 # Generated: $(date '+%Y-%m-%d %H:%M:%S')
 # ============================================================================
 
+# Load Brotli module (Bitrix official)
+load_module /usr/lib/nginx/modules/ngx_http_brotli_filter_module.so;
+load_module /usr/lib/nginx/modules/ngx_http_brotli_static_module.so;
+
 user bitrix;
 worker_processes ${workers};
 worker_rlimit_nofile 65535;
@@ -525,6 +529,9 @@ events {
 http {
     # Security
     server_tokens off;
+
+    # CORS origin validation map (required by snippets/cors.conf)
+    include /etc/nginx/snippets/cors-map.conf;
 
     # Performance: File cache
     open_file_cache max=10000 inactive=60s;
@@ -572,6 +579,17 @@ http {
     gzip_static on;
     gzip_vary on;
     gzip_disable "MSIE [1-6]\.";
+
+    # Brotli compression (Bitrix official)
+    brotli on;
+    brotli_static on;
+    brotli_types
+        text/plain text/css text/xml text/javascript
+        application/javascript application/json application/xml
+        application/rss+xml application/atom+xml
+        image/svg+xml;
+    brotli_comp_level 6;
+    brotli_min_length 20;
 
     # Client
     client_max_body_size 1024M;
