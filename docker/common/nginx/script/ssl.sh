@@ -52,9 +52,20 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
                 CERT_PATH="$SSL_PATH/$DOMAIN/$SSL_KEY"
                 KEY_PATH="$SSL_PATH/$DOMAIN/$SSL_PRIV_KEY"
 
-                # Add listen 443 and ssl directives if not present
+                # Add listen 443 and ssl directives after first listen [::]:80 line
                 if ! grep -q "listen 443" "$ACTIVE_CONF" 2>/dev/null; then
-                    sed -i '/listen 80;/a\    listen 443 ssl;\n    ssl_certificate '"$CERT_PATH"';\n    ssl_certificate_key '"$KEY_PATH"';' "$ACTIVE_CONF"
+                    awk -v cert="$CERT_PATH" -v key="$KEY_PATH" '
+                    /listen \[::\]:80;/ && !done {
+                        print
+                        print "    listen 443 ssl;"
+                        print "    listen [::]:443 ssl;"
+                        print "    ssl_certificate " cert ";"
+                        print "    ssl_certificate_key " key ";"
+                        done=1
+                        next
+                    }
+                    {print}
+                    ' "$ACTIVE_CONF" > "${ACTIVE_CONF}.tmp" && mv "${ACTIVE_CONF}.tmp" "$ACTIVE_CONF"
                     echo "[ssl] SSL directives added to $ACTIVE_CONF"
                     CERT_GENERATED=1
                 fi
