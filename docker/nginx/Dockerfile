@@ -79,8 +79,10 @@ RUN mkdir -p \
     /var/run/nginx \
     /var/template \
     /etc/letsencrypt/live && \
-    chown -R ${UID}:${GID} /home/${UGN} /var/cache/nginx /var/log/nginx /var/run/nginx /var/template /var/lib/nginx 2>/dev/null; \
-    chmod -R 755 /home/${UGN} /var/cache/nginx /var/log/nginx /var/run/nginx /var/lib/nginx 2>/dev/null; true
+    chown -R ${UID}:${GID} /home/${UGN} /var/cache/nginx /var/log/nginx /var/run/nginx /var/template /var/lib/nginx /var/tmp/nginx 2>/dev/null; \
+    mkdir -p /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy /var/lib/nginx/tmp/fastcgi /var/lib/nginx/tmp/uwsgi /var/lib/nginx/tmp/scgi && \
+    chown -R ${UID}:${GID} /var/lib/nginx && \
+    chmod -R 755 /home/${UGN} /var/cache/nginx /var/log/nginx /var/run/nginx /var/lib/nginx
 
 # --- Copy templates and configs ---
 COPY --chown=${UID}:${GID} docker/common/nginx/templates /var/template
