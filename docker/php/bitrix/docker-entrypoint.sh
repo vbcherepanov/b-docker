@@ -533,11 +533,8 @@ OPCACHE_MAX_FILES="${PHP_OPCACHE_MAX_FILES:-100000}"
 
 # Development: check every request (revalidate_freq=0)
 # Production: check every 2 seconds (revalidate_freq=2)
-if [ "${ENVIRONMENT}" = "prod" ] || [ "${ENVIRONMENT}" = "production" ]; then
-    OPCACHE_REVALIDATE="${PHP_OPCACHE_REVALIDATE_FREQ:-2}"
-else
-    OPCACHE_REVALIDATE="${PHP_OPCACHE_REVALIDATE_FREQ:-0}"
-fi
+# Bitrix requires revalidate_freq=0 (check every request when validate_timestamps=1)
+OPCACHE_REVALIDATE="${PHP_OPCACHE_REVALIDATE_FREQ:-0}"
 
 # Generate OPcache runtime config
 cat > /usr/local/etc/php/conf.d/zz-opcache-runtime.ini <<EOF
