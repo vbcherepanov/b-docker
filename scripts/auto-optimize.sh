@@ -608,6 +608,7 @@ http {
     chunked_transfer_encoding on;
 
     include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*.conf;
 }
 EOF
 

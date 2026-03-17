@@ -71,6 +71,7 @@ RUN mkdir -p \
     /home/${UGN}/app \
     /home/${UGN}/tmp \
     /etc/nginx/conf.d \
+    /etc/nginx/sites-enabled \
     /var/cache/nginx/client_temp \
     /var/cache/nginx/proxy_temp \
     /var/cache/nginx/fastcgi_temp \
