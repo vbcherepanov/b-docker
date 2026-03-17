@@ -686,10 +686,10 @@ services:
       start_period: 10s
       retries: 3
 
-    # Security hardening (Bitrix official)
+    # Security hardening
+    # NOTE: no-new-privileges DISABLED for Nginx — master process runs as root
+    # and uses setuid() to switch workers to bitrix user via "user bitrix;" directive.
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:

@@ -65,7 +65,8 @@ RUN ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo ${TZ} > /etc/timezo
 RUN addgroup -g ${GID} ${UGN} 2>/dev/null || true && \
     adduser -D -u ${UID} -G ${UGN} ${UGN} 2>/dev/null || true
 
-# --- Create directories ---
+# --- Create directories and fix permissions ---
+# Alpine nginx creates /var/lib/nginx/* as root — must chown after apk install
 RUN mkdir -p \
     /home/${UGN}/app \
     /home/${UGN}/tmp \
@@ -78,11 +79,27 @@ RUN mkdir -p \
     /var/log/nginx \
     /var/run/nginx \
     /var/template \
-    /etc/letsencrypt/live && \
-    chown -R ${UID}:${GID} /home/${UGN} /var/cache/nginx /var/log/nginx /var/run/nginx /var/template /var/lib/nginx /var/tmp/nginx 2>/dev/null; \
-    mkdir -p /var/lib/nginx/tmp/client_body /var/lib/nginx/tmp/proxy /var/lib/nginx/tmp/fastcgi /var/lib/nginx/tmp/uwsgi /var/lib/nginx/tmp/scgi && \
-    chown -R ${UID}:${GID} /var/lib/nginx && \
-    chmod -R 755 /home/${UGN} /var/cache/nginx /var/log/nginx /var/run/nginx /var/lib/nginx
+    /etc/letsencrypt/live \
+    /var/lib/nginx/tmp/client_body \
+    /var/lib/nginx/tmp/proxy \
+    /var/lib/nginx/tmp/fastcgi \
+    /var/lib/nginx/tmp/uwsgi \
+    /var/lib/nginx/tmp/scgi \
+    /var/lib/nginx/logs && \
+    ln -sf /dev/stderr /var/lib/nginx/logs/error.log && \
+    chown -R ${UID}:${GID} \
+        /home/${UGN} \
+        /var/cache/nginx \
+        /var/log/nginx \
+        /var/template \
+        /var/lib/nginx && \
+    chmod -R 755 \
+        /home/${UGN} \
+        /var/cache/nginx \
+        /var/log/nginx \
+        /var/run/nginx \
+        /var/lib/nginx && \
+    chown root:root /var/run/nginx
 
 # --- Copy templates and configs ---
 COPY --chown=${UID}:${GID} docker/common/nginx/templates /var/template
