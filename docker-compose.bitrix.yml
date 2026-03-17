@@ -659,7 +659,7 @@ services:
       - *ssl-certs
       - *letsencrypt-certs
       # Мультисайтовые конфиги и SSL
-      - ./config/nginx/sites:/etc/nginx/sites-enabled:ro
+      - ./config/nginx/sites:/etc/nginx/sites-enabled
       - ./config/nginx/ssl:/etc/nginx/ssl:ro
 
     # depends_on убран чтобы избежать циклической зависимости с bitrix
