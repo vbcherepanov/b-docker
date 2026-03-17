@@ -4,8 +4,8 @@
 # SSL modes: 0 (none), self (custom certs), free (Let's Encrypt)
 # Features: Brotli compression (Bitrix official)
 # =============================================================================
-# Use nginx:mainline-alpine for brotli module support
-FROM nginx:1.27-alpine
+# Pin nginx version to match nginx-mod-http-brotli module version in Alpine
+FROM nginx:1.26-alpine
 
 # --- Build Arguments ---
 ARG ENVIRONMENT=local
