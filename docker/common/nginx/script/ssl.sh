@@ -29,28 +29,47 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
         # Ensure certificate exists (request if needed)
         ensure_cert "$DOMAIN" "$EMAIL" || true
 
-        # Check if per-site config already has SSL configured
-        if [ -f "/etc/nginx/sites-enabled/${DOMAIN}.conf" ]; then
-            if grep -q "ssl_certificate" "/etc/nginx/sites-enabled/${DOMAIN}.conf" 2>/dev/null; then
-                echo "[ssl] Per-site config already has SSL, skipping"
-            elif cert_exists "$DOMAIN"; then
-                # Certificate exists but per-site config has no SSL — use certbot --nginx to install
-                echo "[ssl] Installing SSL into per-site config via certbot..."
-                certbot install --nginx --non-interactive \
-                    --cert-name "$DOMAIN" 2>&1 || \
-                    echo "[ssl] WARNING: certbot install failed, trying manual config..."
-
-                # Verify SSL was added
-                if grep -q "ssl_certificate" "/etc/nginx/sites-enabled/${DOMAIN}.conf" 2>/dev/null; then
-                    CERT_GENERATED=1
-                    echo "[ssl] SSL installed into per-site config for $DOMAIN"
-                else
-                    echo "[ssl] WARNING: Could not install SSL into per-site config"
-                fi
-            else
-                echo "[ssl] Per-site config found but no certificate available yet"
+        # Check if any config already has SSL configured
+        HAS_SSL=0
+        for _cf in "/etc/nginx/sites-enabled/${DOMAIN}.conf" "$CONF_DIR/${DOMAIN}.conf" "$CONF_DIR/ssl_${DOMAIN}.conf"; do
+            if grep -q "ssl_certificate" "$_cf" 2>/dev/null; then
+                HAS_SSL=1
+                echo "[ssl] SSL already configured in $_cf, skipping"
+                break
             fi
-        else
+        done
+
+        if [ "$HAS_SSL" -eq 0 ] && cert_exists "$DOMAIN"; then
+            # Certificate exists but no SSL in nginx config — add ssl directives manually
+            echo "[ssl] Adding SSL to nginx config..."
+            # Find the active config file
+            ACTIVE_CONF=""
+            for _cf in "/etc/nginx/sites-enabled/${DOMAIN}.conf" "$CONF_DIR/${DOMAIN}.conf"; do
+                [ -f "$_cf" ] && ACTIVE_CONF="$_cf" && break
+            done
+
+            if [ -n "$ACTIVE_CONF" ]; then
+                CERT_PATH="$SSL_PATH/$DOMAIN/$SSL_KEY"
+                KEY_PATH="$SSL_PATH/$DOMAIN/$SSL_PRIV_KEY"
+
+                # Add listen 443 and ssl directives if not present
+                if ! grep -q "listen 443" "$ACTIVE_CONF" 2>/dev/null; then
+                    sed -i '/listen 80;/a\    listen 443 ssl;\n    ssl_certificate '"$CERT_PATH"';\n    ssl_certificate_key '"$KEY_PATH"';' "$ACTIVE_CONF"
+                    echo "[ssl] SSL directives added to $ACTIVE_CONF"
+                    CERT_GENERATED=1
+                fi
+            fi
+        elif [ "$HAS_SSL" -eq 0 ] && ! cert_exists "$DOMAIN"; then
+            echo "[ssl] No certificate available yet, skipping SSL config"
+        fi
+
+        if [ "$HAS_SSL" -eq 0 ] && [ "$CERT_GENERATED" -eq 0 ] && ! cert_exists "$DOMAIN"; then
+            # No per-site config and no cert — will be handled below
+            true
+        fi
+
+        # Generate from template only if no config exists at all
+        if [ ! -f "/etc/nginx/sites-enabled/${DOMAIN}.conf" ] && [ ! -f "$CONF_DIR/${DOMAIN}.conf" ] && [ ! -f "$CONF_DIR/ssl_${DOMAIN}.conf" ]; then
             # No per-site config — generate SSL config from template
             cert_paths=$(get_cert_paths "$DOMAIN" "$EMAIL")
             if [ $? -eq 0 ]; then
