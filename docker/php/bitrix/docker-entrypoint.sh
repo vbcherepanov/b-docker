@@ -635,7 +635,7 @@ elif [ -n "$NGINX_IP" ]; then
 
     while [ $COUNT -lt $MAX_TRIES ]; do
         # Пытаемся получить сертификат от nginx
-        NGINX_CERT=$(echo | timeout 5 openssl s_client -connect "${NGINX_IP}:443" -servername "${DOMAIN}" 2>/dev/null | openssl x509 2>/dev/null)
+        NGINX_CERT=$(echo | timeout 5 openssl s_client -connect "${NGINX_IP}:443" -servername "${DOMAIN}" 2>/dev/null | openssl x509 2>/dev/null || true)
 
         if [ -n "$NGINX_CERT" ]; then
             # Добавляем сертификат в CA bundle PHP
