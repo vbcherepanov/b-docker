@@ -4,8 +4,23 @@
 # SSL modes: 0 (none), self (custom certs), free (Let's Encrypt)
 # Features: Brotli compression (Bitrix official)
 # =============================================================================
-# Pin nginx version to match nginx-mod-http-brotli module version in Alpine
-FROM nginx:1.26-alpine
+# nginx:1.27-alpine with Brotli compiled from source
+FROM nginx:1.27-alpine AS builder
+
+# Build Brotli module from source for exact nginx version match
+RUN apk add --no-cache git build-base pcre2-dev openssl-dev zlib-dev linux-headers cmake \
+    && nginx_version=$(nginx -v 2>&1 | sed 's/.*\///' ) \
+    && wget -qO- "https://nginx.org/download/nginx-${nginx_version}.tar.gz" | tar xz \
+    && git clone --recurse-submodules https://github.com/google/ngx_brotli /tmp/ngx_brotli \
+    && cd /tmp/ngx_brotli/deps/brotli && mkdir out && cd out \
+    && cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_C_FLAGS="-Ofast -flto -funroll-loops -ffunction-sections -fdata-sections -Wl,--gc-sections" .. \
+    && cmake --build . --config Release --target brotlienc \
+    && cd /nginx-${nginx_version} \
+    && ./configure --with-compat --add-dynamic-module=/tmp/ngx_brotli \
+    && make modules \
+    && cp objs/ngx_http_brotli_filter_module.so objs/ngx_http_brotli_static_module.so /tmp/
+
+FROM nginx:1.27-alpine
 
 # --- Build Arguments ---
 ARG ENVIRONMENT=local
@@ -44,16 +59,18 @@ ENV UID=${UID}
 ENV GID=${GID}
 ENV DOLLAR='$'
 
-# --- Install dependencies and Brotli module ---
-# nginx-mod-http-brotli provides brotli compression (Bitrix official feature)
+# --- Copy Brotli modules compiled for this exact nginx version ---
+COPY --from=builder /tmp/ngx_http_brotli_filter_module.so /usr/lib/nginx/modules/
+COPY --from=builder /tmp/ngx_http_brotli_static_module.so /usr/lib/nginx/modules/
+
+# --- Install dependencies ---
 RUN apk add --no-cache \
     gettext \
     bash \
     curl \
     openssl \
     nss \
-    tzdata \
-    nginx-mod-http-brotli
+    tzdata
 
 # --- Timezone ---
 RUN ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo ${TZ} > /etc/timezone
