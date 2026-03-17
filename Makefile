@@ -111,11 +111,9 @@ first-run-prod: setup docker-network-create init-main-site ensure-defaults build
 	@$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx /usr/local/bin/script/main.sh || true
 	@echo ""
 	@if [ "$(SSL)" = "free" ]; then \
-		echo "🔒 Запрос SSL сертификата (Let's Encrypt)..."; \
-		$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx sh -c \
-			'. /usr/local/bin/script/func/main.sh && ensure_cert "$(DOMAIN)" "$(LETSENCRYPT_EMAIL)"' && \
-		echo "🔄 Перезагрузка nginx с SSL..." && \
-		$(DOCKER_COMPOSE) $(PROFILES_PROD) exec --user root nginx nginx -s reload || \
+		echo "🔒 Запрос SSL сертификата и обновление конфига..."; \
+		./scripts/site.sh ssl-le $(DOMAIN) && \
+		echo "✅ SSL сертификат получен и nginx обновлён" || \
 		echo "⚠️  SSL не получен. Запусти позже: make ssl-init"; \
 	fi
 	@echo ""

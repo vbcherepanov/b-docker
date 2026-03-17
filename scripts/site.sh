@@ -599,10 +599,10 @@ get_letsencrypt_cert() {
 
     local container="${DOMAIN:-bitrix}_nginx"
 
-    # Skip if container is not running
+    # Skip if container is not running (return 1 = cert NOT obtained)
     if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container}$"; then
         log "WARN" "Nginx container not running, skip Let's Encrypt (run: make ssl-le SITE=$domain)"
-        return 0
+        return 1
     fi
 
     # Check if certbot is available in nginx container

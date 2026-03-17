@@ -40,6 +40,17 @@ if [ "$PHP_FPM_HOST" != "bitrix" ]; then
     done
 fi
 
+# Remove duplicate site configs from conf.d/ if they exist in sites-enabled/
+# (Site configs are managed by site.sh → sites-enabled/, not by Dockerfile → conf.d/)
+for se_conf in /etc/nginx/sites-enabled/*.conf; do
+    [ -f "$se_conf" ] || continue
+    base_name=$(basename "$se_conf")
+    if [ -f "/etc/nginx/conf.d/$base_name" ]; then
+        echo "Removing duplicate config: /etc/nginx/conf.d/$base_name (exists in sites-enabled/)"
+        rm -f "/etc/nginx/conf.d/$base_name"
+    fi
+done
+
 # Run SSL setup script
 if [ -f /usr/local/bin/script/ssl.sh ]; then
     echo "Running SSL setup..."
