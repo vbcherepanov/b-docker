@@ -54,7 +54,7 @@ init-main-site:
 	@echo "✅ Структура и конфигурация созданы для $(DOMAIN)"
 
 # Полная инициализация с нуля (для первого запуска)
-first-run: setup docker-network-create init-main-site build-base
+first-run: setup docker-network-create init-main-site ensure-defaults build-base
 	@echo ""
 	@echo "🏗️  Сборка и запуск контейнеров..."
 	$(DOCKER_COMPOSE) $(PROFILES_LOCAL) build
@@ -93,7 +93,7 @@ quick-start: docker-network-create build-base
 	@echo "✅ Контейнеры запущены. Статус: make local-ps"
 
 # Первый запуск для production
-first-run-prod: setup docker-network-create init-main-site build-base
+first-run-prod: setup docker-network-create init-main-site ensure-defaults build-base
 	@echo ""
 	@echo "🏗️  Сборка и запуск контейнеров (production)..."
 	$(DOCKER_COMPOSE) $(PROFILES_PROD) build
@@ -248,7 +248,11 @@ restart: restart-local
 down: down-local
 build: docker-build
 
-build-base: build-base-cli build-base-fpm
+# Ensure default configs exist before any build
+ensure-defaults:
+	@chmod +x ./scripts/ensure-defaults.sh && ./scripts/ensure-defaults.sh
+
+build-base: ensure-defaults build-base-cli build-base-fpm
 
 build-base-cli:
 	docker build --build-arg UGN=$(UGN) --build-arg UID=$(UID) --build-arg GID=$(GID)  --build-arg ENVIRONMENT=$(ENVIRONMENT)  --build-arg DEBUG=$(DEBUG) \
@@ -269,7 +273,7 @@ docker-network-create:
 # === НОВЫЕ DOCKER COMPOSE КОМАНДЫ ===
 
 # Локальная разработка
-docker-local-build:
+docker-local-build: ensure-defaults
 	$(DOCKER_COMPOSE_LOCAL) build --build-arg PHP_VERSION=${PHP_VERSION}
 
 docker-local-up:

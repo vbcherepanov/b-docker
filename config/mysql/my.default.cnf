@@ -1,0 +1,72 @@
+# ============================================================================
+# MySQL/MariaDB Configuration - DEFAULT
+# Safe defaults for any server (2+ CPU, 2+ GB RAM).
+# auto-optimize.sh generates optimized version per environment.
+# ============================================================================
+
+[mysqld]
+bind-address = 0.0.0.0
+port = 3306
+skip-name-resolve = 1
+
+# Character set
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+init-connect = "SET NAMES utf8mb4"
+
+# InnoDB Engine (conservative defaults)
+innodb_strict_mode = OFF
+innodb_file_per_table = 1
+innodb_buffer_pool_size = 512M
+innodb_buffer_pool_instances = 1
+innodb_flush_log_at_trx_commit = 2
+innodb_log_buffer_size = 16M
+innodb_lock_wait_timeout = 120
+innodb_io_capacity = 200
+innodb_io_capacity_max = 400
+innodb_flush_neighbors = 0
+innodb_read_io_threads = 4
+innodb_write_io_threads = 4
+
+# Connections
+max_connections = 50
+thread_cache_size = 16
+thread_stack = 512K
+table_open_cache = 200
+table_definition_cache = 200
+
+# Buffers
+sort_buffer_size = 2M
+join_buffer_size = 2M
+read_buffer_size = 1M
+read_rnd_buffer_size = 4M
+
+# Temp tables
+tmp_table_size = 32M
+max_heap_table_size = 32M
+max_allowed_packet = 256M
+
+# Bitrix specific
+transaction-isolation = READ-COMMITTED
+sql_mode = ""
+skip-log-bin
+
+# Security
+local_infile = 0
+
+# Logging
+log_error = /var/log/mysql/error.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2
+
+[mysql]
+default-character-set = utf8mb4
+
+[mysqldump]
+quick
+quote-names
+max_allowed_packet = 256M
+
+[client]
+default-character-set = utf8mb4

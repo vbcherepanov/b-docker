@@ -1,0 +1,13 @@
+# ============================================================================
+# Memcached Configuration - DEFAULT
+# Safe defaults for any server. auto-optimize.sh generates optimized version.
+# Values are overridden by env vars in docker-compose command.
+# ============================================================================
+
+-m 128
+-c 512
+-t 4
+-I 2m
+-l 0.0.0.0
+-p 11211
+-o modern

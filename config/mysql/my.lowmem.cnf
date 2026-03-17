@@ -1,0 +1,150 @@
+# ============================================================================
+# MARIADB CONFIGURATION FOR BITRIX - LOW MEMORY (2GB RAM)
+# Оптимизировано для: VPS с ограниченной RAM (2-4GB)
+# ============================================================================
+
+[mysqld]
+# ============================================================================
+# ОСНОВНЫЕ НАСТРОЙКИ
+# ============================================================================
+bind-address = 0.0.0.0
+port = 3306
+datadir = /var/lib/mysql
+socket = /var/run/mysqld/mysqld.sock
+pid-file = /var/run/mysqld/mysqld.pid
+
+# Timezone
+default-time-zone = "+03:00"
+
+# Пропускаем разрешение имен хостов
+skip-name-resolve = 1
+
+# Server ID
+server-id = 1
+
+# ============================================================================
+# КОДИРОВКА
+# ============================================================================
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+init-connect = "SET NAMES utf8mb4"
+
+# ============================================================================
+# INNODB НАСТРОЙКИ (для 2GB RAM сервера)
+# ============================================================================
+innodb_strict_mode = OFF
+innodb_file_per_table = 1
+
+# Буфер пул: ~25% от RAM для 2GB сервера (оставляем память для PHP, nginx, redis)
+innodb_buffer_pool_size = 512M
+
+# Прогрев буфер пула при старте
+innodb_buffer_pool_dump_at_shutdown = 1
+innodb_buffer_pool_load_at_startup = 1
+
+# Метод flush (fsync для совместимости)
+innodb_flush_method = fsync
+
+# Flush лога (2 = Bitrix recommended)
+innodb_flush_log_at_trx_commit = 2
+
+# Redo log (уменьшен для low-mem)
+innodb_log_file_size = 128M
+
+# Буфер для лога
+innodb_log_buffer_size = 16M
+
+# Timeout для блокировок
+innodb_lock_wait_timeout = 50
+
+# IO настройки (умеренные для VPS)
+innodb_io_capacity = 200
+innodb_io_capacity_max = 400
+innodb_read_io_threads = 4
+innodb_write_io_threads = 4
+
+# Flush neighbors (0 для SSD)
+innodb_flush_neighbors = 0
+
+# Temporary tablespace
+innodb_temp_data_file_path = ibtmp1:12M:autoextend:max:1G
+
+# ============================================================================
+# ПРОИЗВОДИТЕЛЬНОСТЬ (уменьшено для low-mem)
+# ============================================================================
+max_connections = 100
+thread_cache_size = 16
+thread_stack = 256K
+
+# Кэш таблиц
+table_open_cache = 400
+table_definition_cache = 400
+table_open_cache_instances = 4
+
+# Буферы (минимальные)
+sort_buffer_size = 1M
+join_buffer_size = 1M
+read_buffer_size = 512K
+read_rnd_buffer_size = 1M
+
+# Временные таблицы
+tmp_table_size = 32M
+max_heap_table_size = 32M
+
+# Максимальный размер пакета
+max_allowed_packet = 64M
+
+# Буфер для MyISAM
+key_buffer_size = 32M
+
+# ============================================================================
+# BITRIX СПЕЦИФИЧНЫЕ НАСТРОЙКИ
+# ============================================================================
+transaction-isolation = READ-COMMITTED
+sql_mode = ""
+
+# Binary logging отключен
+skip-log-bin = 1
+
+# ============================================================================
+# ЛОГИРОВАНИЕ (stderr для Docker)
+# ============================================================================
+general_log = 0
+slow_query_log = 0
+long_query_time = 3
+
+# ============================================================================
+# БЕЗОПАСНОСТЬ
+# ============================================================================
+local_infile = 0
+max_connect_errors = 10000
+
+# ============================================================================
+# TIMEOUTS
+# ============================================================================
+interactive_timeout = 3600
+wait_timeout = 3600
+connect_timeout = 10
+
+# ============================================================================
+# ЭКОНОМИЯ ПАМЯТИ
+# ============================================================================
+# Отключаем performance_schema (экономит ~200MB RAM)
+performance_schema = OFF
+
+# Case sensitivity
+lower_case_table_names = 0
+
+[mysql]
+default-character-set = utf8mb4
+
+[mysqldump]
+quick
+quote-names
+max_allowed_packet = 64M
+single-transaction
+
+[client]
+port = 3306
+socket = /var/run/mysqld/mysqld.sock
+default-character-set = utf8mb4

@@ -28,13 +28,10 @@
 # Backups
 /backups/*
 
-# Generated configs (auto-optimize.sh creates per-server)
-/config/memcached/memcached.conf
-/config/mysql/my.*.cnf
-/config/redis/redis.conf
-/docker/common/nginx/nginx.conf
-/docker/common/php/conf.d/opcache.ini
-/docker/common/php/php-fpm.d/www.conf
+# Generated configs (auto-optimize.sh overwrites defaults per-server)
+# Default configs ARE tracked in git so `git clone && build` works out of the box.
+# auto-optimize.sh generates optimized versions that override defaults.
+# To avoid committing optimized configs, run: git update-index --skip-worktree <file>
 
 # Local override
 docker-compose.override.yml

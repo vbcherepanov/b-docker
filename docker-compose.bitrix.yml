@@ -778,14 +778,17 @@ services:
         reservations:
           memory: ${MYSQL_MEMORY_RESERVATION:-1G}
 
-    # Security hardening (Bitrix official)
+    # Security hardening
+    # NOTE: no-new-privileges DISABLED for MySQL/MariaDB — entrypoint uses
+    # gosu to switch from root to mysql user, which requires setuid syscall.
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
     cap_add:
       - SYS_NICE
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     tmpfs:
       - /tmp:noexec,nodev,nosuid
       - /var/tmp:noexec,nodev,nosuid
@@ -995,12 +998,15 @@ services:
       timeout: 10s
       retries: 3
 
-    # Security hardening (Bitrix official)
+    # Security hardening
+    # NOTE: no-new-privileges DISABLED for Memcached — process needs to
+    # drop supplementary groups which requires privilege operations.
     init: true
-    security_opt:
-      - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     tmpfs:
       - /tmp:noexec,nodev,nosuid
       - /var/tmp:noexec,nodev,nosuid
