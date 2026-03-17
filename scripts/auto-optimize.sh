@@ -70,7 +70,7 @@ ${YELLOW}Генерируемые конфигурации:${NC}
     config/memcached/memcached.conf         Memcached
     docker/common/nginx/nginx.conf          Nginx
     docker/common/php/php-fpm.d/www.conf    PHP-FPM pool
-    docker/common/php/conf.d/opcache.ini    OPcache
+    docker/common/php/conf.d/00-opcache.ini    OPcache
     .env                                    (если --update-env)
 
 EOF
@@ -709,7 +709,7 @@ EOF
 
 generate_opcache_config() {
     local cpu=$1 ram=$2 env=$3
-    local output="$PROJECT_DIR/docker/common/php/conf.d/opcache.ini"
+    local output="$PROJECT_DIR/docker/common/php/conf.d/00-opcache.ini"
 
     log_info "Генерация OPcache конфигурации..."
 
@@ -1048,7 +1048,7 @@ print_report() {
     echo -e "    ${GREEN}✓${NC} config/memcached/memcached.conf"
     echo -e "    ${GREEN}✓${NC} docker/common/nginx/nginx.conf"
     echo -e "    ${GREEN}✓${NC} docker/common/php/php-fpm.d/www.conf"
-    echo -e "    ${GREEN}✓${NC} docker/common/php/conf.d/opcache.ini"
+    echo -e "    ${GREEN}✓${NC} docker/common/php/conf.d/00-opcache.ini"
     [ "$UPDATE_ENV" = true ] && echo -e "    ${GREEN}✓${NC} .env (обновлён)"
     echo ""
 
