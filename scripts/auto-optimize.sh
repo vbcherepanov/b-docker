@@ -715,7 +715,7 @@ generate_opcache_config() {
 
     local mem=256 files=100000 validate=1 revalidate=2
     [ "$ram" -gt 8 ] && mem=512
-    [ "$env" == "prod" ] && { validate=0; revalidate=0; }
+    [ "$env" == "prod" ] && revalidate=60
     [ "$env" == "local" ] && revalidate=0
 
     [ "$DRY_RUN" = true ] && { log_warning "[DRY RUN] $output"; return; }

@@ -155,10 +155,8 @@ else
 fi
 
 echo ""
-echo "=== 5. FIXING docker/common/php/conf.d/opcache.ini ==="
-backup_file "docker/common/php/conf.d/opcache.ini"
-
-echo -e "${GREEN}[SKIP]${NC} docker/common/php/conf.d/opcache.ini — managed by auto-optimize.sh"
+echo "=== 5. SKIPPING docker/common/php/conf.d/opcache.ini ==="
+echo -e "${GREEN}[SKIP]${NC} opcache.ini — managed by auto-optimize.sh"
 
 echo ""
 echo "=== 6. SKIPPING docker/common/nginx/nginx.conf ==="
