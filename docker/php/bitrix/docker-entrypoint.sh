@@ -551,8 +551,8 @@ opcache.interned_strings_buffer = ${OPCACHE_INTERNED}
 ; File cache settings (Bitrix official: 100000)
 opcache.max_accelerated_files = ${OPCACHE_MAX_FILES}
 
-; File validation frequency
-; 0=every request (dev), 2=every 2 sec (prod)
+; File validation — always enabled (required by Bitrix)
+opcache.validate_timestamps = 1
 opcache.revalidate_freq = ${OPCACHE_REVALIDATE}
 EOF
 
