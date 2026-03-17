@@ -140,20 +140,25 @@ request_cert() {
 
     echo "[ssl] Requesting certificate for $domain..." >&2
 
-    # Count domain parts to decide whether to include www variant
-    # 2 parts (example.com) -> request both: -d example.com -d www.example.com
-    # 3+ parts (app.example.com) -> request only: -d app.example.com
+    local domain_args="-d $domain"
+
+    # Add www variant only if DNS resolves (avoid NXDOMAIN failures)
     local domain_parts
     domain_parts=$(echo "$domain" | awk -F. '{print NF}')
-
-    local domain_args="-d $domain"
     if [ "$domain_parts" -le 2 ]; then
-        domain_args="$domain_args -d www.$domain"
-        echo "[ssl] Including www.$domain in certificate request" >&2
+        if nslookup "www.$domain" >/dev/null 2>&1; then
+            domain_args="$domain_args -d www.$domain"
+            echo "[ssl] Including www.$domain in certificate request" >&2
+        else
+            echo "[ssl] Skipping www.$domain (DNS not found)" >&2
+        fi
     fi
 
+    # Use --webroot to avoid nginx.conf permission issues with --nginx plugin
+    local webroot="/home/${UGN:-bitrix}/app/$domain/www"
     local output
-    output=$(certbot certonly --nginx --non-interactive --agree-tos --expand \
+    output=$(certbot certonly --webroot -w "$webroot" \
+        --non-interactive --agree-tos --expand \
         --email "$email" $domain_args 2>&1)
     local result=$?
 

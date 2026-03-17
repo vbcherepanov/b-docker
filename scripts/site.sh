@@ -402,18 +402,28 @@ generate_nginx_config() {
     fi
 
     # Determine canonical host for redirect logic
+    # Skip www redirect if DNS doesn't resolve for www
     local canonical_host="${CANONICAL_HOST:-non-www}"
     local canonical_name redirect_name
+    local www_exists=false
+    nslookup "www.$domain" >/dev/null 2>&1 && www_exists=true
 
-    if [ "$canonical_host" = "www" ]; then
+    if [ "$canonical_host" = "www" ] && [ "$www_exists" = true ]; then
         canonical_name="www.$domain"
         redirect_name="$domain"
     elif [ "$canonical_host" = "non-www" ]; then
         canonical_name="$domain"
-        redirect_name="www.$domain"
+        # Only redirect www if DNS exists for it
+        if [ "$www_exists" = true ]; then
+            redirect_name="www.$domain"
+        else
+            redirect_name=""
+        fi
     else
-        # "both" - serve both, no redirect
-        canonical_name="$domain www.$domain"
+        canonical_name="$domain"
+        if [ "$www_exists" = true ]; then
+            canonical_name="$domain www.$domain"
+        fi
         redirect_name=""
     fi
 
@@ -486,7 +496,7 @@ ${redirect_block}
 server {
     listen 80;
     listen [::]:80;
-    server_name $domain www.$domain;
+    server_name $canonical_name${redirect_name:+ $redirect_name};
 
     # ACME challenge for Let's Encrypt renewal
     location /.well-known/acme-challenge/ {
@@ -611,14 +621,24 @@ get_letsencrypt_cert() {
         return 1
     fi
 
-    # Request certificate
+    # Build domain args: add www only if DNS resolves
+    local domain_args="-d $domain"
+    if nslookup "www.$domain" >/dev/null 2>&1; then
+        domain_args="$domain_args -d www.$domain"
+        log "INFO" "Including www.$domain (DNS resolved)"
+    else
+        log "INFO" "Skipping www.$domain (DNS not found)"
+    fi
+
+    # Use --webroot to avoid nginx.conf permission issues with --nginx plugin
+    local webroot="/home/${UGN:-bitrix}/app/$domain/www"
     docker exec "$container" certbot certonly \
-        --nginx \
+        --webroot -w "$webroot" \
         --non-interactive \
         --agree-tos \
+        --expand \
         --email "$email" \
-        -d "$domain" \
-        -d "www.$domain" || {
+        $domain_args || {
         log "ERROR" "Failed to get Let's Encrypt certificate"
         return 1
     }
@@ -977,14 +997,18 @@ case "${1:-}" in
         ssl_site "${2:-}"
         ;;
     "ssl-le"|"letsencrypt")
-        # Generate HTTP config first for ACME challenge
+        # Generate HTTP config first for ACME challenge (webroot needs this)
         generate_nginx_config "${2:-}" "$DEFAULT_PHP" "false"
         reload_nginx || true
         # Get certificate
-        get_letsencrypt_cert "${2:-}"
-        # Upgrade to HTTPS config with LE paths
-        generate_nginx_config "${2:-}" "$DEFAULT_PHP" "true" "letsencrypt"
-        reload_nginx
+        if get_letsencrypt_cert "${2:-}"; then
+            # Upgrade to HTTPS config with LE cert paths
+            generate_nginx_config "${2:-}" "$DEFAULT_PHP" "true" "letsencrypt"
+            reload_nginx
+        else
+            log "ERROR" "SSL certificate not obtained, keeping HTTP config"
+            exit 1
+        fi
         ;;
     "reload")
         reload_nginx

@@ -143,11 +143,8 @@ first-run-prod: setup docker-network-create init-main-site ensure-defaults build
 
 # Запрос SSL сертификата (использовать после первого запуска если SSL не получен)
 ssl-init:
-	@echo "🔒 Запрос SSL сертификата для $(DOMAIN)..."
-	$(DOCKER_COMPOSE) exec --user root nginx sh -c \
-		'. /usr/local/bin/script/func/main.sh && ensure_cert "$(DOMAIN)" "$(LETSENCRYPT_EMAIL)"'
-	@echo "🔄 Перезагрузка nginx..."
-	$(DOCKER_COMPOSE) exec --user root nginx nginx -s reload
+	@echo "🔒 Запрос SSL сертификата и обновление конфига для $(DOMAIN)..."
+	@./scripts/site.sh ssl-le $(DOMAIN)
 	@echo "✅ SSL настроен для $(DOMAIN)"
 
 # Инициализация БД для сайта (использовать: make db-init SITE=domain.com)
