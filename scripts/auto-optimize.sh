@@ -713,10 +713,10 @@ generate_opcache_config() {
 
     log_info "Генерация OPcache конфигурации..."
 
-    local mem=256 files=20000 validate=0
+    local mem=256 files=20000 validate=1 revalidate=2
     [ "$ram" -gt 8 ] && mem=512
-    [ "$env" == "local" ] && validate=1
-    [ "$env" == "prod" ] && files=30000
+    [ "$env" == "prod" ] && { validate=0; revalidate=0; files=30000; }
+    [ "$env" == "local" ] && revalidate=0
 
     [ "$DRY_RUN" = true ] && { log_warning "[DRY RUN] $output"; return; }
 
@@ -738,7 +738,7 @@ opcache.max_wasted_percentage=5
 ; CRITICAL for performance
 ; Production: 0 (no file checks) | Development: 1
 opcache.validate_timestamps=${validate}
-opcache.revalidate_freq=0
+opcache.revalidate_freq=${revalidate}
 
 opcache.save_comments=1
 opcache.enable_cli=0

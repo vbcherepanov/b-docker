@@ -158,36 +158,7 @@ echo ""
 echo "=== 5. FIXING docker/common/php/conf.d/opcache.ini ==="
 backup_file "docker/common/php/conf.d/opcache.ini"
 
-cat > docker/common/php/conf.d/opcache.ini << 'OPCACHE_EOF'
-; OPcache configuration for Bitrix - PRODUCTION OPTIMIZED
-; CRITICAL: validate_timestamps=0 for production
-; Set OPCACHE_VALIDATE_TIMESTAMPS=1 in .env for development
-
-opcache.enable=1
-opcache.memory_consumption=256
-opcache.interned_strings_buffer=64
-opcache.max_accelerated_files=20000
-opcache.max_wasted_percentage=5
-
-; PRODUCTION: Set to 0 for maximum performance
-; Files changes require opcache_reset() or PHP-FPM restart
-opcache.validate_timestamps=0
-opcache.revalidate_freq=0
-
-opcache.save_comments=1
-opcache.enable_cli=0
-opcache.blacklist_filename=/etc/php.d/opcache*.blacklist
-
-; File update strategy
-opcache.consistency_checks=0
-opcache.force_restart_timeout=180
-
-; JIT settings (PHP 8.0+)
-; Tracing mode provides best performance for long-running applications
-opcache.jit=tracing
-opcache.jit_buffer_size=128M
-OPCACHE_EOF
-echo -e "${GREEN}[FIXED]${NC} docker/common/php/conf.d/opcache.ini - production settings"
+echo -e "${GREEN}[SKIP]${NC} docker/common/php/conf.d/opcache.ini — managed by auto-optimize.sh"
 
 echo ""
 echo "=== 6. SKIPPING docker/common/nginx/nginx.conf ==="
