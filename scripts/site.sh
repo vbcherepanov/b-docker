@@ -479,8 +479,7 @@ server {
     # (safe to include even before Bitrix is installed — uses try_files)
     include /etc/nginx/snippets/bitrix.conf;
 
-    # Health check
-    include /etc/nginx/snippets/health.conf;
+    # Health check (included via bitrix.conf)
 }
 ${redirect_block}
 # Redirect HTTP to HTTPS (canonical)
@@ -548,8 +547,7 @@ server {
     # (safe to include even before Bitrix is installed — uses try_files)
     include /etc/nginx/snippets/bitrix.conf;
 
-    # Health check
-    include /etc/nginx/snippets/health.conf;
+    # Health check (included via bitrix.conf)
 
     # ACME challenge for future Let's Encrypt setup
     location /.well-known/acme-challenge/ {
