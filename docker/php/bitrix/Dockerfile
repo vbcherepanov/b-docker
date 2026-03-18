@@ -79,6 +79,12 @@ RUN apk add --no-cache \
     iputils \
     bind-tools \
     jq \
+    # Image optimization tools (required by Bitrix)
+    jpegoptim \
+    optipng \
+    ghostscript \
+    libwebp-tools \
+    gifsicle \
     && rm -rf /tmp/* /var/cache/apk/*
 
 # ============================================================================
