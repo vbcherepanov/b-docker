@@ -1,0 +1,17 @@
+# ============================================================================
+# PER-SITE NGINX CUSTOM RULES
+# Include inside server {} block via: include /etc/bitrix-sites/<domain>/nginx-custom.conf;
+# ============================================================================
+# Add custom location blocks, redirects, rewrites, etc.
+# This file is included BEFORE bitrix.conf, so rules here take priority.
+#
+# Examples:
+#   # 301 redirect
+#   location = /old-page/ { return 301 /new-page/; }
+#
+#   # Rewrite pattern
+#   rewrite ^/blog/(\d+)$ /news/$1/ permanent;
+#
+#   # Block specific path
+#   location /secret/ { deny all; }
+# ============================================================================

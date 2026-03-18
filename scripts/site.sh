@@ -294,6 +294,22 @@ EOF
 
     log "OK" "Created: $site_config_dir/supervisor/"
 
+    # Create per-site nginx custom rules (redirects, rewrites, etc.)
+    cat > "$site_config_dir/nginx-custom.conf" << 'EOF'
+# ============================================================================
+# PER-SITE NGINX CUSTOM RULES
+# Included inside server {} block before bitrix.conf
+# ============================================================================
+# Add custom location blocks, redirects, rewrites, etc.
+#
+# Examples:
+#   location = /old-page/ { return 301 /new-page/; }
+#   rewrite ^/blog/(\d+)$ /news/$1/ permanent;
+# ============================================================================
+EOF
+
+    log "OK" "Created: $site_config_dir/nginx-custom.conf"
+
     log "OK" "Per-site configuration created for $domain"
 }
 
@@ -485,6 +501,9 @@ server {
     # Include shared security headers, rate limiting, bot blocking
     include /etc/nginx/snippets/security.conf;
 
+    # Per-site custom rules (redirects, rewrites, etc.)
+    include /etc/bitrix-sites/$domain/nginx-custom.conf;
+
     # Include Bitrix-specific routing, caching, FastCGI config
     # (safe to include even before Bitrix is installed — uses try_files)
     include /etc/nginx/snippets/bitrix.conf;
@@ -552,6 +571,9 @@ server {
 
     # Include shared security headers, rate limiting, bot blocking
     include /etc/nginx/snippets/security.conf;
+
+    # Per-site custom rules (redirects, rewrites, etc.)
+    include /etc/bitrix-sites/$domain/nginx-custom.conf;
 
     # Include Bitrix-specific routing, caching, FastCGI config
     # (safe to include even before Bitrix is installed — uses try_files)
