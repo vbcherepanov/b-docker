@@ -661,6 +661,8 @@ services:
       # Мультисайтовые конфиги и SSL
       - ./config/nginx/sites:/etc/nginx/sites-enabled
       - ./config/nginx/ssl:/etc/nginx/ssl:ro
+      # Per-site custom nginx rules (redirects, rewrites, etc.)
+      - *sites-config
 
     # depends_on убран чтобы избежать циклической зависимости с bitrix
     # nginx может запускаться независимо и будет отдавать 502 пока PHP-FPM недоступен
