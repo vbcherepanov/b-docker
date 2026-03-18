@@ -117,7 +117,7 @@ main() {
                         exit 1
                         ;;
                 esac
-                ((site_count++))
+                site_count=$((site_count + 1))
             fi
         fi
     done
