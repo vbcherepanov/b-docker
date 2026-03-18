@@ -416,7 +416,7 @@ date.timezone = \${TZ}
 
 ; Bitrix специфичные настройки
 mbstring.func_overload = 0
-mbstring.internal_encoding = UTF-8
+; mbstring.internal_encoding deprecated in PHP 8.0+, UTF-8 is default
 
 [PHP-FPM]
 ; FPM настройки процессов
