@@ -96,8 +96,8 @@ main() {
             site_www="$domain_dir/www"
 
             # Skip template and hidden directories
-            [[ "$domain" == _* ]] && continue
-            [[ "$domain" == .* ]] && continue
+            if [[ "$domain" == _* ]]; then continue; fi
+            if [[ "$domain" == .* ]]; then continue; fi
 
             # Only process directories with www/ subdirectory (valid sites)
             if [ -d "$site_www" ]; then

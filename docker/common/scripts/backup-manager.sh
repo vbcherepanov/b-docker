@@ -61,8 +61,8 @@ get_sites_list() {
             if [ -d "$dir" ]; then
                 local site
                 site=$(basename "$dir")
-                [[ "$site" == _* ]] && continue
-                [[ "$site" == .* ]] && continue
+                if [[ "$site" == _* ]]; then continue; fi
+                if [[ "$site" == .* ]]; then continue; fi
                 sites+=("$site")
             fi
         done
