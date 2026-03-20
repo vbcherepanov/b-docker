@@ -3,7 +3,8 @@ upstream mailhogssl {
 }
 server {
     index index.php;
-    listen 443 http2 ssl;
+    listen 443 ssl;
+    http2 on;
     server_name ${MAIL_SUBDOMAIN}.${DOMAIN};
     server_tokens off;
 

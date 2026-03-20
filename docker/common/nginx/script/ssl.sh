@@ -111,7 +111,8 @@ if [ "$ENVIRONMENT" = "prod" ] || [ "$ENVIRONMENT" = "dev" ]; then
                     cat >> "$CONF_DIR/ssl_$DOMAIN.conf" << REDIRECT_EOF
 # Redirect non-canonical HTTPS to canonical
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${REDIRECT_NAME};
 
     ssl_certificate ${CERT_PATH};
@@ -268,7 +269,8 @@ EOFSCRIPT
                 cat >> "$CONF_DIR/ssl_$DOMAIN.conf" << REDIRECT_EOF
 # Redirect non-canonical HTTPS to canonical
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${REDIRECT_NAME};
 
     ssl_certificate ${CERT_PATH};

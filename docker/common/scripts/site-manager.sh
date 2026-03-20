@@ -134,7 +134,8 @@ EOF
     if [ "${SSL:-0}" != "0" ]; then
         cat > "$CONFIG_DIR/ssl_${domain}.conf" << EOF
 server {
-    listen 8443 ssl http2;
+    listen 8443 ssl;
+    http2 on;
     server_name $domain;
     root /home/\$UGN/app/$domain/www;
     index index.php index.html;

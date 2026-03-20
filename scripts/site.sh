@@ -450,8 +450,9 @@ generate_nginx_config() {
             redirect_block="
 # Redirect to canonical URL (HTTPS)
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    http2 on;
+    listen [::]:443 ssl;
     server_name $redirect_name;
 
     ssl_certificate $ssl_cert;
@@ -472,8 +473,9 @@ server {
 
 # HTTPS Server (canonical)
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    http2 on;
+    listen [::]:443 ssl;
     server_name $canonical_name;
 
     root /home/$UGN/app/$domain/www;
