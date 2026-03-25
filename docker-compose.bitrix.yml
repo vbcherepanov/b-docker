@@ -1427,6 +1427,7 @@ services:
       context: .
       dockerfile: docker/backup/Dockerfile
       args:
+        MYSQL_IMAGE: ${MYSQL_IMAGE:-mysql:8.4}
         TZ: ${TZ}
 
     environment:
@@ -1434,7 +1435,6 @@ services:
       - DB_NAME=${DB_NAME}
       - DB_USERNAME=${DB_USERNAME}
       - DB_PASSWORD=${DB_PASSWORD}
-      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
       - BACKUP_SCHEDULE_DB=${BACKUP_SCHEDULE_DB:-0 3 * * *}
       - BACKUP_SCHEDULE_FILES=${BACKUP_SCHEDULE_FILES:-0 4 * * *}
       - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
@@ -1443,7 +1443,6 @@ services:
     volumes:
       - *app-code
       - *backup-data
-      - ./config/backup:/etc/backup:ro
       - ./volume/mysql/dump:/mysql-dump
 
     networks:

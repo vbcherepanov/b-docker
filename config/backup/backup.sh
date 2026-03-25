@@ -1,163 +1,182 @@
 #!/bin/bash
 
-# Настройки из переменных окружения
-DB_HOST=${DB_HOST:-mysql}
-DB_NAME=${DB_NAME:-bitrix}
-DB_USERNAME=${DB_USERNAME:-bitrix}
-# Security: Require explicit password
-if [ -z "${DB_PASSWORD:-}" ]; then echo "ERROR: DB_PASSWORD not set"; exit 1; fi
-DB_PASSWORD="${DB_PASSWORD}"
-if [ -z "${DB_ROOT_PASSWORD:-}" ]; then echo "ERROR: DB_ROOT_PASSWORD not set"; exit 1; fi
-DB_ROOT_PASSWORD="${DB_ROOT_PASSWORD}"
-BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+# =============================================================================
+# Bitrix Docker Backup Script
+# Auto-detects mysqldump vs mariadb-dump
+# Sources environment from /etc/environment.backup (cron-safe)
+# =============================================================================
 
-# Директории
+# Source environment (cron doesn't pass container ENV)
+if [ -f /etc/environment.backup ]; then
+    set -a
+    source /etc/environment.backup
+    set +a
+fi
+
+# Settings
+DB_HOST="${DB_HOST:-mysql}"
+DB_NAME="${DB_NAME:-bitrix}"
+DB_USERNAME="${DB_USERNAME:-bitrix}"
+BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
+
+if [ -z "${DB_PASSWORD:-}" ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: DB_PASSWORD not set"
+    exit 1
+fi
+
+# Directories
 BACKUP_DIR="/backups"
 APP_DIR="/home/bitrix/app"
 LOG_FILE="/var/log/backup.log"
 
-# Функция логирования
+# Detect dump tool
+if command -v mysqldump >/dev/null 2>&1; then
+    DUMP_CMD="mysqldump"
+elif command -v mariadb-dump >/dev/null 2>&1; then
+    DUMP_CMD="mariadb-dump"
+else
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: No dump tool found"
+    exit 1
+fi
+
+# Detect mysql client
+MYSQL_CMD="mysql"
+command -v mariadb >/dev/null 2>&1 && MYSQL_CMD="mariadb"
+
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
 }
 
-# Создание директорий для бэкапов
 mkdir -p "$BACKUP_DIR/database" "$BACKUP_DIR/files"
 
-# Функция бэкапа базы данных
+# ---------------------------------------------------------------------------
 backup_database() {
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$BACKUP_DIR/database/db_backup_${timestamp}.sql.gz"
 
-    log "Начинаем бэкап базы данных: $DB_NAME"
+    log "Starting database backup: $DB_NAME (using $DUMP_CMD)"
 
-    # Use MYSQL_PWD to avoid password in process list
+    # Pre-flight: verify connection and check table count
     export MYSQL_PWD="$DB_PASSWORD"
-    if mysqldump -h "$DB_HOST" -u "$DB_USERNAME" \
+
+    local table_count
+    table_count=$($MYSQL_CMD -h "$DB_HOST" -u "$DB_USERNAME" -N -e \
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB_NAME'" 2>/dev/null)
+
+    if [ -z "$table_count" ] || [ "$table_count" -eq 0 ]; then
+        unset MYSQL_PWD
+        log "ERROR: Database $DB_NAME has 0 tables — aborting (refusing to create empty backup)"
+        return 1
+    fi
+
+    log "Database has $table_count tables"
+
+    # Run dump
+    if $DUMP_CMD -h "$DB_HOST" -u "$DB_USERNAME" \
         --single-transaction \
         --routines \
         --triggers \
         --events \
         --quick \
         --lock-tables=false \
-        "$DB_NAME" | gzip > "$backup_file"; then
+        "$DB_NAME" 2>>"$LOG_FILE" | gzip > "$backup_file"; then
         unset MYSQL_PWD
 
-        log "Бэкап базы данных завершен: $backup_file"
+        # Verify backup is not suspiciously small (< 1KB = likely empty)
+        local size_bytes
+        size_bytes=$(stat -c%s "$backup_file" 2>/dev/null || stat -f%z "$backup_file" 2>/dev/null || echo 0)
 
-        # Проверка размера файла
-        if [ -s "$backup_file" ]; then
-            local size=$(du -h "$backup_file" | cut -f1)
-            log "Размер бэкапа базы данных: $size"
-        else
-            log "ОШИБКА: Файл бэкапа базы данных пустой"
+        if [ "$size_bytes" -lt 1024 ]; then
+            log "ERROR: Backup file too small (${size_bytes} bytes) — likely empty dump"
+            rm -f "$backup_file"
             return 1
         fi
+
+        local size
+        size=$(du -h "$backup_file" | cut -f1)
+        log "Database backup complete: $backup_file ($size, $table_count tables)"
     else
         unset MYSQL_PWD
-        log "ОШИБКА: Не удалось создать бэкап базы данных"
+        log "ERROR: $DUMP_CMD failed"
+        rm -f "$backup_file"
         return 1
     fi
 }
 
-# Функция бэкапа файлов
+# ---------------------------------------------------------------------------
 backup_files() {
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$BACKUP_DIR/files/files_backup_${timestamp}.tar.gz"
 
-    log "Начинаем бэкап файлов из: $APP_DIR"
+    log "Starting files backup: $APP_DIR"
 
-    if [ -d "$APP_DIR" ]; then
-        if tar -czf "$backup_file" -C "$APP_DIR" \
-            --exclude='*.log' \
-            --exclude='cache/*' \
-            --exclude='tmp/*' \
-            --exclude='bitrix/cache/*' \
-            --exclude='bitrix/tmp/*' \
-            --exclude='bitrix/managed_cache/*' \
-            --exclude='bitrix/stack_cache/*' \
-            --exclude='upload/resize_cache/*' \
-            .; then
+    if [ ! -d "$APP_DIR" ]; then
+        log "ERROR: Directory $APP_DIR not found"
+        return 1
+    fi
 
-            log "Бэкап файлов завершен: $backup_file"
+    if tar -czf "$backup_file" -C "$APP_DIR" \
+        --exclude='*.log' \
+        --exclude='cache/*' \
+        --exclude='tmp/*' \
+        --exclude='bitrix/cache/*' \
+        --exclude='bitrix/tmp/*' \
+        --exclude='bitrix/managed_cache/*' \
+        --exclude='bitrix/stack_cache/*' \
+        --exclude='upload/resize_cache/*' \
+        . 2>>"$LOG_FILE"; then
 
-            # Проверка размера файла
-            if [ -s "$backup_file" ]; then
-                local size=$(du -h "$backup_file" | cut -f1)
-                log "Размер бэкапа файлов: $size"
-            else
-                log "ОШИБКА: Файл бэкапа файлов пустой"
-                return 1
-            fi
+        if [ -s "$backup_file" ]; then
+            local size
+            size=$(du -h "$backup_file" | cut -f1)
+            log "Files backup complete: $backup_file ($size)"
         else
-            log "ОШИБКА: Не удалось создать бэкап файлов"
+            log "ERROR: Files backup is empty"
+            rm -f "$backup_file"
             return 1
         fi
     else
-        log "ОШИБКА: Директория $APP_DIR не найдена"
+        log "ERROR: tar failed"
+        rm -f "$backup_file"
         return 1
     fi
 }
 
-# Функция очистки старых бэкапов
+# ---------------------------------------------------------------------------
 cleanup_old_backups() {
-    log "Начинаем очистку бэкапов старше $BACKUP_RETENTION_DAYS дней"
+    log "Cleaning backups older than $BACKUP_RETENTION_DAYS days"
 
-    # Очистка бэкапов базы данных
-    find "$BACKUP_DIR/database" -name "*.sql.gz" -mtime +$BACKUP_RETENTION_DAYS -delete
+    local db_removed
+    db_removed=$(find "$BACKUP_DIR/database" -name "*.sql.gz" -mtime +$BACKUP_RETENTION_DAYS -delete -print 2>/dev/null | wc -l)
 
-    # Очистка бэкапов файлов
-    find "$BACKUP_DIR/files" -name "*.tar.gz" -mtime +$BACKUP_RETENTION_DAYS -delete
+    local files_removed
+    files_removed=$(find "$BACKUP_DIR/files" -name "*.tar.gz" -mtime +$BACKUP_RETENTION_DAYS -delete -print 2>/dev/null | wc -l)
 
-    log "Очистка старых бэкапов завершена"
+    log "Cleanup done: removed $db_removed db + $files_removed file backups"
 }
 
-# Функция отправки уведомлений (опционально)
-send_notification() {
-    local message="$1"
-    local status="$2"
-
-    # Здесь можно добавить отправку уведомлений через webhook, email и т.д.
-    # Например, через curl к webhook Discord, Slack или Telegram
-
-    log "Уведомление: $message (статус: $status)"
-}
-
-# Основная функция
+# ---------------------------------------------------------------------------
 main() {
-    local action="$1"
-
-    case "$action" in
-        "database")
+    case "${1:-}" in
+        database)
             backup_database
-            if [ $? -eq 0 ]; then
-                send_notification "Бэкап базы данных успешно завершен" "success"
-            else
-                send_notification "Ошибка при создании бэкапа базы данных" "error"
-            fi
             ;;
-        "files")
+        files)
             backup_files
-            if [ $? -eq 0 ]; then
-                send_notification "Бэкап файлов успешно завершен" "success"
-            else
-                send_notification "Ошибка при создании бэкапа файлов" "error"
-            fi
             ;;
-        "cleanup")
+        cleanup)
             cleanup_old_backups
             ;;
-        "full")
+        full)
             backup_database
             backup_files
             cleanup_old_backups
             ;;
         *)
-            echo "Использование: $0 {database|files|cleanup|full}"
+            echo "Usage: $0 {database|files|cleanup|full}"
             exit 1
             ;;
     esac
 }
 
-# Запуск
 main "$@"

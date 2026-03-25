@@ -1,50 +1,34 @@
 #!/bin/bash
-
-# Backup cleanup script
-# Removes old backups based on retention policy
-
 set -e
 
-BACKUP_DIR=${BACKUP_DIR:-"/backups"}
-RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+# Source environment (cron doesn't pass container ENV)
+if [ -f /etc/environment.backup ]; then
+    set -a
+    source /etc/environment.backup
+    set +a
+fi
 
-# Log function
+BACKUP_DIR="${BACKUP_DIR:-/backups}"
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-7}"
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Cleanup function
-cleanup_backups() {
-    local backup_type=$1
-    local retention_days=${2:-$RETENTION_DAYS}
-
-    log "Starting cleanup for $backup_type backups (retention: $retention_days days)"
-
-    if [ -d "$BACKUP_DIR/$backup_type" ]; then
-        # Find and remove files older than retention period
-        find "$BACKUP_DIR/$backup_type" -type f -mtime +$retention_days -name "*.tar.gz" -exec rm -f {} \;
-
-        # Count remaining backups
-        local count=$(find "$BACKUP_DIR/$backup_type" -type f -name "*.tar.gz" | wc -l)
-        log "Cleanup completed. Remaining $backup_type backups: $count"
-    else
-        log "Backup directory $BACKUP_DIR/$backup_type does not exist"
-    fi
-}
-
-# Main cleanup
-log "Starting backup cleanup process"
+log "Starting cleanup (retention: $RETENTION_DAYS days)"
 
 # Cleanup database backups
-cleanup_backups "database" $RETENTION_DAYS
-
-# Cleanup file backups
-cleanup_backups "files" $RETENTION_DAYS
-
-# Cleanup logs older than 30 days
-if [ -d "/var/log" ]; then
-    find /var/log -type f -name "*.log" -mtime +30 -exec rm -f {} \;
-    log "Old log files cleaned up"
+if [ -d "$BACKUP_DIR/database" ]; then
+    removed=$(find "$BACKUP_DIR/database" -type f -name "*.sql.gz" -mtime +$RETENTION_DAYS -delete -print 2>/dev/null | wc -l)
+    remaining=$(find "$BACKUP_DIR/database" -type f -name "*.sql.gz" 2>/dev/null | wc -l)
+    log "Database: removed $removed, remaining $remaining"
 fi
 
-log "Backup cleanup process completed"
+# Cleanup file backups
+if [ -d "$BACKUP_DIR/files" ]; then
+    removed=$(find "$BACKUP_DIR/files" -type f -name "*.tar.gz" -mtime +$RETENTION_DAYS -delete -print 2>/dev/null | wc -l)
+    remaining=$(find "$BACKUP_DIR/files" -type f -name "*.tar.gz" 2>/dev/null | wc -l)
+    log "Files: removed $removed, remaining $remaining"
+fi
+
+log "Cleanup completed"

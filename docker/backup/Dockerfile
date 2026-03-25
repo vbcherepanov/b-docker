@@ -1,35 +1,33 @@
-FROM alpine:latest
+# Backup container — uses the SAME database image as the main DB
+# This guarantees 100% client/server compatibility (no MariaDB client vs MySQL 8.4 issues)
+ARG MYSQL_IMAGE=mysql:8.4
+FROM ${MYSQL_IMAGE}
 
-# Установка необходимых пакетов
-RUN apk add --no-cache \
-    bash \
-    curl \
-    mysql-client \
-    tar \
-    gzip \
-    rsync \
-    tzdata
+ARG TZ=UTC
 
-# Создание пользователя для бэкапов
-RUN addgroup -g 1000 -S backup && adduser -u 1000 -S backup -G backup
+# Install cron and utilities
+# mysql:8.4 = Oracle Linux 9 (microdnf)
+# mariadb:* = Ubuntu (apt-get)
+RUN set -eux; \
+    if command -v microdnf >/dev/null 2>&1; then \
+        microdnf install -y cronie tar gzip findutils && microdnf clean all; \
+    elif command -v apt-get >/dev/null 2>&1; then \
+        apt-get update && apt-get install -y --no-install-recommends cron tar gzip findutils && rm -rf /var/lib/apt/lists/*; \
+    fi
 
-# Создание директорий
-RUN mkdir -p /backups /scripts /etc/backup /var/spool/cron/crontabs
+# Set timezone
+RUN ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo ${TZ} > /etc/timezone
 
-# Копирование скриптов
+# Create directories
+RUN mkdir -p /backups/database /backups/files /scripts /var/log
+
+# Copy scripts
 COPY config/backup/backup.sh /scripts/backup.sh
 COPY config/backup/cleanup.sh /scripts/cleanup.sh
-COPY config/backup/crontab /var/spool/cron/crontabs/root
+COPY docker/backup/docker-entrypoint.sh /docker-entrypoint.sh
 
-# Установка прав
-RUN chmod +x /scripts/*.sh && \
-    chown -R backup:backup /backups /scripts && \
-    chmod 0600 /var/spool/cron/crontabs/root
+# Set permissions
+RUN chmod +x /scripts/*.sh /docker-entrypoint.sh
 
-# Установка временной зоны
-ARG TZ
-ENV TZ=${TZ:-UTC}
-RUN ln -snf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime && echo ${TZ:-UTC} > /etc/timezone
-
-# Запуск busybox crond (foreground, логи в stdout)
-CMD ["crond", "-f", "-l", "2"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["cron"]
