@@ -16,7 +16,7 @@ log() {
 # -----------------------------------------------------------
 # 1. Save environment for cron (cron doesn't pass container ENV)
 # -----------------------------------------------------------
-env | grep -E '^(DB_|BACKUP_|TZ|HOME|PATH)' > /etc/environment.backup
+env | grep -E '^(DB_|BACKUP_|TZ|HOME|PATH)' | sed "s/=/='/" | sed "s/$/'/" > /etc/environment.backup
 chmod 600 /etc/environment.backup
 log "Environment saved to /etc/environment.backup"
 
