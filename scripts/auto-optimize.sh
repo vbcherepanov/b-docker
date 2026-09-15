@@ -532,6 +532,7 @@ http {
 
     # CORS origin validation map (required by snippets/cors.conf)
     include /etc/nginx/snippets/cors-map.conf;
+    include /etc/nginx/snippets/rate-limit.conf;
 
     # Performance: File cache
     open_file_cache max=10000 inactive=60s;
