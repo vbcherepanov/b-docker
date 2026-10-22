@@ -19,7 +19,7 @@ show_help() {
     $0 ssl <domain> <action>         - Управление SSL сертификатами
 
 Примеры:
-    $0 add example.com 8.3           - Добавить сайт с PHP 8.3
+    $0 add example.com 8.5           - Добавить сайт с PHP 8.5
     $0 add test.local                - Добавить сайт с PHP по умолчанию
     $0 remove old.local              - Удалить сайт
     $0 ssl example.com generate      - Создать SSL сертификат
@@ -28,14 +28,14 @@ show_help() {
 Переменные окружения:
     ENVIRONMENT - окружение (local/dev/prod)
     UGN - пользователь (по умолчанию: bitrix)
-    PHP_VERSION - версия PHP по умолчанию (7.4, 8.3 или 8.4)
+    PHP_VERSION - версия PHP по умолчанию (7.4, 8.3, 8.4 или 8.5)
 EOF
 }
 
 # Получение переменных окружения
 ENVIRONMENT=${ENVIRONMENT:-local}
 UGN=${UGN:-bitrix}
-DEFAULT_PHP_VERSION=${PHP_VERSION:-8.3}
+DEFAULT_PHP_VERSION=${PHP_VERSION:-8.5}
 
 # Директории
 WWW_DIR="./www"
@@ -63,8 +63,8 @@ add_site() {
     fi
 
     # Проверка версии PHP
-    if [[ "$php_version" != "7.4" && "$php_version" != "8.3" && "$php_version" != "8.4" ]]; then
-        log "ОШИБКА: Поддерживаются только версии PHP 7.4, 8.3 и 8.4"
+    if [[ "$php_version" != "7.4" && "$php_version" != "8.3" && "$php_version" != "8.4" && "$php_version" != "8.5" ]]; then
+        log "ОШИБКА: Поддерживаются только версии PHP 7.4, 8.3, 8.4 и 8.5"
         exit 1
     fi
 

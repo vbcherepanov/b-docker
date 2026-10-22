@@ -27,7 +27,7 @@
 ## Возможности
 
 - **Мультисайт** -- изоляция каждого сайта (отдельная БД, SMTP, конфиги)
-- **PHP 7.4 / 8.3 / 8.4** -- двухуровневая сборка образов (базовый + сервисный)
+- **PHP 7.4 / 8.3 / 8.4 / 8.5** -- двухуровневая сборка образов (базовый + сервисный)
 - **Nginx** с CORS, security headers, rate limiting
 - **MySQL / MariaDB / Percona** -- автоматический выбор по объёму RAM
 - **Redis** -- сессии, кэширование, AOF-персистенция, Unix Socket (~30% прирост)
@@ -173,7 +173,7 @@ make split-logs         # Логи
 
 Сборка разделена на два уровня для ускорения:
 
-1. **Базовые образы** (`my/php-base-fpm:8.3`, `my/php-base-cli:8.3`) -- все PHP-расширения, собираются редко
+1. **Базовые образы** (`my/php-base-fpm:8.5`, `my/php-base-cli:8.5`) -- все PHP-расширения, собираются редко
 2. **Сервисные образы** -- наследуют базовые, добавляют конфиги, собираются быстро
 
 ```bash
@@ -502,7 +502,7 @@ Push Server включается автоматически во всех окр
 
 | Переменная                  | Описание                     | По умолчанию |
 |-----------------------------|------------------------------|--------------|
-| `PHP_VERSION`               | Версия PHP: 7.4, 8.3, 8.4   | `8.3`        |
+| `PHP_VERSION`               | Версия PHP: 7.4, 8.3, 8.4, 8.5 | `8.5`      |
 | `PHP_MEMORY_LIMIT`          | Лимит памяти                 | `512M`       |
 | `PHP_UPLOAD_MAX_FILESIZE`   | Макс. размер загрузки        | `1024M`      |
 | `PHP_POST_MAX_SIZE`         | Макс. размер POST            | `1024M`      |
@@ -794,8 +794,8 @@ b-docker/
 │   ├── mongodb/Dockerfile
 │   └── php/
 │       ├── base/                       # Базовые PHP-образы
-│       │   ├── cli/{7.4,8.3,8.4}/Dockerfile
-│       │   └── fpm/{7.4,8.3,8.4}/Dockerfile
+│       │   ├── cli/{7.4,8.3,8.4,8.5}/Dockerfile
+│       │   └── fpm/{7.4,8.3,8.4,8.5}/Dockerfile
 │       ├── bitrix/Dockerfile           # Unified контейнер
 │       ├── php-fpm/Dockerfile          # Split: FPM
 │       ├── php-cli/Dockerfile          # Split: CLI
@@ -975,11 +975,20 @@ ls -la www/shop.local/www/          # Проверить файлы сайта
 
 ```bash
 # 1. Изменить в .env:
-PHP_VERSION=8.4    # или 8.3, 7.4
+PHP_VERSION=8.5    # или 8.4, 8.3, 7.4
 
 # 2. Пересобрать и перезапустить:
 make build-base
 make local-restart
+```
+
+Базовые Dockerfile берут точный тег `php:X.Y.Z-*-alpine` (см. `docker/php/base/*/8.5/Dockerfile`).
+В день релиза PHP на Docker Hub часто есть только `linux/amd64`; на Apple Silicon `docker pull`
+отвечает `no matching manifest for linux/arm64/v8`. Тогда собрать официальный образ локально:
+
+```bash
+scripts/build-upstream-php.sh 8.5.12        # php:8.5.12-fpm-alpine + php:8.5.12-cli-alpine под архитектуру хоста
+make build-base
 ```
 
 ### Как переключиться на MariaDB / Percona?

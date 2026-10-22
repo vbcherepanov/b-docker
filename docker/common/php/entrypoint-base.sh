@@ -127,7 +127,7 @@ fi
 echo -e "${GREEN}  Permissions configured${NC}"
 
 # ============================================================================
-# STEP 3: PHP VERSION-SPECIFIC SETTINGS (compatibility 7.4, 8.3, 8.4)
+# STEP 3: PHP VERSION-SPECIFIC SETTINGS (compatibility 7.4, 8.3, 8.4, 8.5)
 # ============================================================================
 echo -e "${YELLOW}[3/4] Configuring PHP version-specific settings...${NC}"
 

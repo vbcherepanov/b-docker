@@ -35,7 +35,7 @@ fi
 # Configuration
 ENVIRONMENT="${ENVIRONMENT:-local}"
 UGN="${UGN:-bitrix}"
-DEFAULT_PHP="${PHP_VERSION:-8.4}"
+DEFAULT_PHP="${PHP_VERSION:-8.5}"
 SSL_MODE="${SSL:-0}"
 
 # Directories (relative to project root)
@@ -368,7 +368,7 @@ COMMANDS:
 
 EXAMPLES:
     ./site.sh add shop.local                    # Add site with default PHP
-    ./site.sh add api.local --php=8.4           # Add site with PHP 8.4
+    ./site.sh add api.local --php=8.5           # Add site with PHP 8.5
     ./site.sh add prod.com --ssl                # Add site with SSL
     ./site.sh add prod.com --ssl=letsencrypt    # Add with Let's Encrypt
     ./site.sh remove old.local                  # Remove site
@@ -378,7 +378,7 @@ EXAMPLES:
     ./site.sh reload                            # Reload nginx
 
 OPTIONS:
-    --php=VERSION       PHP version (7.4, 8.3, 8.4)
+    --php=VERSION       PHP version (7.4, 8.3, 8.4, 8.5)
     --ssl               Generate self-signed SSL
     --ssl=letsencrypt   Use Let's Encrypt
     --no-confirm        Skip confirmation prompts
@@ -755,8 +755,8 @@ add_site() {
     fi
 
     # Validate PHP version
-    if [[ ! "$php_version" =~ ^(7\.4|8\.3|8\.4)$ ]]; then
-        log "ERROR" "Invalid PHP version. Supported: 7.4, 8.3, 8.4"
+    if [[ ! "$php_version" =~ ^(7\.4|8\.3|8\.4|8\.5)$ ]]; then
+        log "ERROR" "Invalid PHP version. Supported: 7.4, 8.3, 8.4, 8.5"
         exit 1
     fi
 

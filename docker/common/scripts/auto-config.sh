@@ -473,7 +473,7 @@ UID=1000
 GID=1000
 
 # PHP настройки (оптимизированы под систему)
-PHP_VERSION=8.3
+PHP_VERSION=8.5
 DISPLAY_ERRORS=$([[ "$environment" == "local" ]] && echo "On" || echo "Off")
 OPCACHE_VALIDATE=$([[ "$environment" == "local" ]] && echo "1" || echo "0")
 

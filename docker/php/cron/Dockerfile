@@ -4,7 +4,7 @@
 # Part of split architecture: php-fpm / php-cli / cron / supervisor
 # ============================================================================
 
-ARG PHP_VERSION=8.3
+ARG PHP_VERSION=8.5
 FROM my/php-base-cli:${PHP_VERSION}
 
 # ============================================================================
